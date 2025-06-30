@@ -1,0 +1,8 @@
+build/
+dist/
+node_modules/
+tmp-jam-pack-nodegui/
+.DS_Store
+.idea
+.vscode
+package-lock.json
