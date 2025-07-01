@@ -780,8 +780,8 @@ class ModbusTestApp {
         slaveLayout.addWidget(slavePortSpin, 0, 1);
         slaveLayout.addWidget(slaveIdLabel, 0, 2);
         slaveLayout.addWidget(slaveIdSpin, 0, 3);
-        slaveLayout.addWidget(startSlaveBtn, 1, 0, 1, 2);
-        slaveLayout.addWidget(stopSlaveBtn, 1, 2, 1, 2);
+        slaveLayout.addWidget(startSlaveBtn, 0, 4);
+        slaveLayout.addWidget(stopSlaveBtn, 0, 5);
 
         // 显示配置区域
         const displayGroup = new QGroupBox();
@@ -1126,10 +1126,11 @@ class ModbusTestApp {
         writeGroup.setTitle("数据写入 ");
         writeGroup.setCheckable(true);
         writeGroup.setChecked(true);
-        const writeLayout = new QGridLayout();
+        const writeLayout = new QBoxLayout(Direction.LeftToRight);
+        writeLayout.setSpacing(10);
         writeGroup.setLayout(writeLayout);
-
         const writeAddrLabel = new QLabel();
+        writeAddrLabel.setFixedWidth(65);
         writeAddrLabel.setText("写入地址:");
         const writeAddrInput = new QLineEdit();
         writeAddrInput.setPlaceholderText("地址");
@@ -1137,18 +1138,22 @@ class ModbusTestApp {
 
         const writeTypeLabel = new QLabel();
         writeTypeLabel.setText("数据类型:");
+        writeTypeLabel.setFixedWidth(65);
+
         const writeTypeCombo = new QComboBox();
-        writeTypeCombo.addItems(["保持寄存器(UInt16)", "输入寄存器(UInt16)", "线圈(Bool)", "Int16", "Int32", "UInt32", "Float32", "Float64"]);
+        writeTypeCombo.addItems(["UInt16", "UInt16", "Bool", "Int16", "Int32", "UInt32", "Float32", "Float64"]);
         writeTypeCombo.setMaximumWidth(150);
 
         const writeEndianLabel = new QLabel();
         writeEndianLabel.setText("字节序:");
+        writeEndianLabel.setFixedWidth(60);
         const writeEndianCombo = new QComboBox();
         writeEndianCombo.addItems(["大端", "小端"]);
         writeEndianCombo.setMaximumWidth(80);
 
         const writeValueLabel = new QLabel();
         writeValueLabel.setText("值:");
+        writeValueLabel.setFixedWidth(30);
         const writeValueInput = new QLineEdit();
         writeValueInput.setPlaceholderText("数值");
         writeValueInput.setMaximumWidth(120);
@@ -1157,15 +1162,15 @@ class ModbusTestApp {
         writeBtn.setText("写入");
         writeBtn.setMaximumWidth(60);
 
-        writeLayout.addWidget(writeAddrLabel, 0, 0);
-        writeLayout.addWidget(writeAddrInput, 0, 1);
-        writeLayout.addWidget(writeTypeLabel, 0, 2);
-        writeLayout.addWidget(writeTypeCombo, 0, 3);
-        writeLayout.addWidget(writeEndianLabel, 1, 0);
-        writeLayout.addWidget(writeEndianCombo, 1, 1);
-        writeLayout.addWidget(writeValueLabel, 1, 2);
-        writeLayout.addWidget(writeValueInput, 1, 3);
-        writeLayout.addWidget(writeBtn, 1, 4);
+        writeLayout.addWidget(writeAddrLabel);
+        writeLayout.addWidget(writeAddrInput);
+        writeLayout.addWidget(writeTypeLabel);
+        writeLayout.addWidget(writeTypeCombo);
+        writeLayout.addWidget(writeEndianLabel);
+        writeLayout.addWidget(writeEndianCombo);
+        writeLayout.addWidget(writeValueLabel);
+        writeLayout.addWidget(writeValueInput);
+        writeLayout.addWidget(writeBtn);
 
         // 统一写入按钮事件
         writeBtn.addEventListener('clicked', () => {
