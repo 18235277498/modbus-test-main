@@ -17,7 +17,7 @@
   "keywords": [
     "nodegui"
   ],
-  "author": "Simon Edwards",
+  "author": "jijibooo",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^20.3.1",

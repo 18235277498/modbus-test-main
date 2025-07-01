@@ -107,7 +107,7 @@ MIT License
 
 ## 作者
 
-Simon Edwards
+jijibooo
 
 ---
 
