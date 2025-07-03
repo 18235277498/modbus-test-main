@@ -82,19 +82,6 @@ npm run package
 3. 可以手动修改寄存器数据
 4. 查看主站的访问日志
 
-## 项目结构
-
-```
-modbus-test/
-├── src/
-│   └── main.ts          # 主程序文件
-├── assets/
-│   └── logox200.png     # 应用图标
-├── packaging/           # 打包配置
-├── package.json         # 项目配置
-├── tsconfig.json        # TypeScript配置
-└── README.md           # 项目说明
-```
 
 ## 许可证
 
