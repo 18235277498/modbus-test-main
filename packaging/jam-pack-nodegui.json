@@ -53,20 +53,17 @@
   },
   "nsis": {
     "skip": false,
-    "description": "A NodeGui application",
+    "description": "modbus测试工具",
     "detailColors": "3db54a 000000",
-    "appTitle": "nodeguiapp",
-    "installerIcon": "$pruneStep_trashDirectory/packaging/windows/nodeguiapp.ico",
-    "uninstallerIcon": "$pruneStep_trashDirectory/packaging/windows/nodeguiapp.ico"
+    "appTitle": "modbusTestTool",
+    "installerIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico",
+    "uninstallerIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico"
   },
   "dmg" : {
-    "applicationIcon": "$pruneStep_trashDirectory/packaging/macos/nodeguiapp.icns",
-    "applicationTitle": "nodeguiapp",
+    "applicationIcon": "$pruneStep_trashDirectory/packaging/macos/modbuslogo.icns",
+    "applicationTitle": "modbusTestTool",
     "nsHumanReadableCopyright": "Copyright 2023 Someone",
-    "cfBundleIdentifier": "com.someapp.someapp",
-    "prePack": [
-      "mv $dmgStep_dmgResourcesDirectory/nodeguiapp $dmgStep_dmgMacOSDirectory/"
-    ]
+    "cfBundleIdentifier": "com.jijibooo.modbus-test"
   }
 
 }

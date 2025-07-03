@@ -1,7 +1,6 @@
 import {
     Direction,
     QAction,
-    QApplication,
     QBoxLayout,
     QCheckBox,
     QComboBox,
@@ -19,7 +18,6 @@ import {
     QPushButton,
     QScrollArea,
     QSpinBox,
-    QStyleFactory,
     QTabWidget,
     QTextEdit,
     QWidget
@@ -74,7 +72,7 @@ class ModbusTestApp {
         this.win = new QMainWindow();
         // console.log(QStyleFactory.keys());
 
-        QApplication.setStyle(QStyleFactory.create('macOS'));
+        // QApplication.setStyle(QStyleFactory.create('macOS'));
         this.setupUI();
     }
 
