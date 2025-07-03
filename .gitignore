@@ -6,3 +6,4 @@ tmp-jam-pack-nodegui/
 .idea
 .vscode
 package-lock.json
+deploy
