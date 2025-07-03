@@ -6,6 +6,7 @@ import {
     QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QGridLayout,
     QGroupBox,
     QIcon,
@@ -79,7 +80,7 @@ class ModbusTestApp {
 
     private setupUI(): void {
         this.win.setWindowTitle("Modbus测试工具");
-        this.win.resize(1000, 700);
+        this.win.resize(1200, 700);
 
         // 创建菜单栏
         this.createMenuBar();
@@ -503,7 +504,6 @@ class ModbusTestApp {
         const readAddressSpin = new QSpinBox();
         readAddressSpin.setRange(0, 65535);
         readAddressSpin.setValue(0);
-        readAddressSpin.setMaximumWidth(70);
 
         const readLengthLabel = new QLabel();
         readLengthLabel.setText("长度:");
@@ -517,30 +517,31 @@ class ModbusTestApp {
         readDataTypeLabel.setText("类型:");
         readDataTypeLabel.setFixedWidth(30);
         const readDataTypeCombo = new QComboBox();
-        readDataTypeCombo.addItems(["Int16", "UInt16", "Int32", "UInt32", "Float32", "Float64"]);
-        readDataTypeCombo.setMaximumWidth(80);
+        readDataTypeCombo.addItems(["Bool", "Int16", "UInt16", "Int32", "UInt32", "Float32", "Float64"]);
+        readDataTypeCombo.setMaximumWidth(130);
 
         const readEndianLabel = new QLabel();
         readEndianLabel.setText("序:");
         readEndianLabel.setFixedWidth(20);
         const readEndianCombo = new QComboBox();
         readEndianCombo.addItems(["大端", "小端"]);
-        readEndianCombo.setFixedWidth(80);
+        readEndianCombo.setFixedWidth(100);
 
         const autoReadCheck = new QCheckBox();
-        autoReadCheck.setFixedWidth(50);
+        autoReadCheck.setMaximumWidth(80);
         autoReadCheck.setText("定时");
 
         const intervalSpin = new QSpinBox();
         intervalSpin.setRange(100, 10000);
         intervalSpin.setValue(1000);
         intervalSpin.setEnabled(false);
-        intervalSpin.setMaximumWidth(70);
+        intervalSpin.setMaximumWidth(100);
         intervalSpin.setSuffix("ms");
 
         const readBtn = new QPushButton();
         readBtn.setDefault(true);
         readBtn.setText("读取");
+        readBtn.setFixedWidth(100);
 
         // 单行紧凑布局
         readConfigLayout.addWidget(readSlaveIdLabel);
@@ -576,7 +577,7 @@ class ModbusTestApp {
         writeSlaveIdLabel.setFixedWidth(20);
         const writeSlaveIdSpin = new QSpinBox();
         writeSlaveIdSpin.setValue(1);
-        writeSlaveIdSpin.setMaximumWidth(60);
+        writeSlaveIdSpin.setFixedWidth(80);
 
         const writeFunctionLabel = new QLabel();
         writeFunctionLabel.setText("功能:");
@@ -589,20 +590,74 @@ class ModbusTestApp {
         writeAddressLabel.setFixedWidth(30);
         const writeAddressSpin = new QSpinBox();
         writeAddressSpin.setValue(0);
-        writeAddressSpin.setMaximumWidth(70);
+        writeAddressSpin.setFixedWidth(100);
 
         const writeValueLabel = new QLabel();
         writeValueLabel.setText("值:");
         writeValueLabel.setFixedWidth(20);
-        const writeValueEdit = new QLineEdit();
-        writeValueEdit.setText("0");
-        writeValueEdit.setMaximumWidth(80);
+        const writeValueEdit = new QDoubleSpinBox();
+        writeValueEdit.setValue(0);
+        writeValueEdit.setDecimals(6);
+        writeValueEdit.setMinimum(-2147483648);
+        writeValueEdit.setMaximum(2147483647);
 
         const writeDataTypeLabel = new QLabel();
         writeDataTypeLabel.setText("类型:");
         writeDataTypeLabel.setFixedWidth(30);
         const writeDataTypeCombo = new QComboBox();
-        writeDataTypeCombo.addItems(["Int16", "UInt16", "Int32", "UInt32", "Float32", "Float64"]);
+        writeDataTypeCombo.setFixedWidth(120);
+        writeDataTypeCombo.addItems(["Bool", "Int16", "UInt16", "Int32", "UInt32", "Float32", "Float64"]);
+
+        // 为写入值输入框设置数据类型范围验证
+        const updateWriteValueRange = () => {
+            const dataType = writeDataTypeCombo.currentText();
+            switch (dataType) {
+                case "Bool":
+                    writeValueEdit.setMinimum(0);
+                    writeValueEdit.setMaximum(1);
+                    writeValueEdit.setDecimals(0);
+                    break;
+                case "Int16":
+                    writeValueEdit.setMinimum(-32768);
+                    writeValueEdit.setMaximum(32767);
+                    writeValueEdit.setDecimals(0);
+                    break;
+                case "UInt16":
+                    writeValueEdit.setMinimum(0);
+                    writeValueEdit.setMaximum(65535);
+                    writeValueEdit.setDecimals(0);
+                    break;
+                case "Int32":
+                    writeValueEdit.setMinimum(-2147483648);
+                    writeValueEdit.setMaximum(2147483647);
+                    writeValueEdit.setDecimals(0);
+                    break;
+                case "UInt32":
+                    writeValueEdit.setMinimum(0);
+                    writeValueEdit.setMaximum(4294967295);
+                    writeValueEdit.setDecimals(0);
+                    break;
+                case "Float32":
+                    writeValueEdit.setMinimum(-3.4028235e+38);
+                    writeValueEdit.setMaximum(3.4028235e+38);
+                    writeValueEdit.setDecimals(3);
+                    break;
+                case "Float64":
+                    writeValueEdit.setMinimum(-1.7976931348623157e+308);
+                    writeValueEdit.setMaximum(1.7976931348623157e+308);
+                    writeValueEdit.setDecimals(4);
+                    break;
+                default:
+                    writeValueEdit.setMinimum(-2147483648);
+                    writeValueEdit.setMaximum(2147483647);
+                    writeValueEdit.setDecimals(0);
+            }
+        };
+        writeDataTypeCombo.addEventListener('currentTextChanged', updateWriteValueRange);
+        // 初始设置范围
+        updateWriteValueRange();
+
+
 
 
         const writeBtn = new QPushButton();
@@ -617,10 +672,11 @@ class ModbusTestApp {
         writeConfigLayout.addWidget(writeFunctionCombo);
         writeConfigLayout.addWidget(writeAddressLabel);
         writeConfigLayout.addWidget(writeAddressSpin);
-        writeConfigLayout.addWidget(writeValueLabel);
-        writeConfigLayout.addWidget(writeValueEdit);
         writeConfigLayout.addWidget(writeDataTypeLabel);
         writeConfigLayout.addWidget(writeDataTypeCombo);
+        writeConfigLayout.addWidget(writeValueLabel);
+        writeConfigLayout.addWidget(writeValueEdit);
+
         writeConfigLayout.addWidget(writeBtn);
 
         // 数据显示表格区域
@@ -643,51 +699,61 @@ class ModbusTestApp {
         const initializeDefaultDataTable = () => {
             // 清空现有内容
             const newDataWidget = new QWidget();
-            const newDataGridLayout = new QGridLayout();
-            newDataGridLayout.setSpacing(0);
-            newDataGridLayout.setContentsMargins(0, 0, 0, 0);
-            newDataWidget.setLayout(newDataGridLayout);
+            const colBoxLayout = new QBoxLayout(Direction.TopToBottom);
+            colBoxLayout.setSpacing(0);
+            colBoxLayout.setContentsMargins(0, 0, 0, 0);
+
+            newDataWidget.setLayout(colBoxLayout);
 
             const pairsPerRow = 6;
             const defaultCount = 20; // 默认显示10个地址
             const rows = Math.ceil(defaultCount / pairsPerRow);
 
+            const rowBoxLayout = new QBoxLayout(Direction.LeftToRight)
             // 添加标题行
             for (let col = 0; col < pairsPerRow; col++) {
                 const addrHeaderLabel = new QLabel();
+                addrHeaderLabel.setFixedHeight(40)
                 addrHeaderLabel.setText(`地址`);
                 addrHeaderLabel.setStyleSheet("font-weight: bold; color: #333333; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; padding: 5px; background-color: #f5f5f5;");
 
                 const valueHeaderLabel = new QLabel();
+                valueHeaderLabel.setFixedHeight(40)
+                valueHeaderLabel.setFixedWidth(120)
                 valueHeaderLabel.setText(`值`);
                 valueHeaderLabel.setStyleSheet("font-weight: bold; color: #333333; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; padding: 5px; background-color: #f5f5f5;");
 
-                newDataGridLayout.addWidget(addrHeaderLabel, 0, col * 2);
-                newDataGridLayout.addWidget(valueHeaderLabel, 0, col * 2 + 1);
+                rowBoxLayout.addWidget(addrHeaderLabel)
+                rowBoxLayout.addWidget(valueHeaderLabel)
             }
+            colBoxLayout.addLayout(rowBoxLayout)
 
             // 填充默认数据
             for (let row = 0; row < rows; row++) {
+                const rowBoxLayout = new QBoxLayout(Direction.LeftToRight)
                 for (let col = 0; col < pairsPerRow; col++) {
-                    const index = row * pairsPerRow + col;
-                    if (index >= defaultCount) break;
-
-                    const addr = index;
+                    const addr = row * pairsPerRow + col;
 
                     // 创建地址标签
                     const addressLabel = new QLabel();
-                    addressLabel.setText(addr.toString());
+                    addressLabel.setFixedHeight(40)
+                    addressLabel.setText(addr > defaultCount ? "" : addr.toString());
                     addressLabel.setStyleSheet("padding: 5px; color: #555555; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #fafafa;");
-                    newDataGridLayout.addWidget(addressLabel, row + 1, col * 2);
+                    rowBoxLayout.addWidget(addressLabel)
 
                     // 创建值标签
                     const valueLabel = new QLabel();
-                    valueLabel.setText("--");
+                    valueLabel.setFixedHeight(40)
+                    valueLabel.setFixedWidth(120)
+                    valueLabel.setText(addr > defaultCount ? "" : "--");
                     valueLabel.setStyleSheet("padding: 5px; color: #888888; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #f8f8f8;");
-                    newDataGridLayout.addWidget(valueLabel, row + 1, col * 2 + 1);
+                    rowBoxLayout.addWidget(valueLabel)
                 }
+
+                colBoxLayout.addLayout(rowBoxLayout)
             }
 
+            colBoxLayout.addStretch(1);
             dataTable.setWidget(newDataWidget);
         };
 
@@ -805,48 +871,69 @@ class ModbusTestApp {
 
             // 创建新的数据widget
             const newDataWidget = new QWidget();
-            const newDataGridLayout = new QGridLayout();
+            const colBoxLayout = new QBoxLayout(Direction.TopToBottom);
+            colBoxLayout.setSpacing(0);
+            colBoxLayout.setContentsMargins(0, 0, 0, 0);
 
-            // 设置间距，与从站表格保持一致
-            newDataGridLayout.setSpacing(0);
-            newDataGridLayout.setContentsMargins(0, 0, 0, 0);
-
-            newDataWidget.setLayout(newDataGridLayout);
+            newDataWidget.setLayout(colBoxLayout);
 
             const pairsPerRow = 6; // 每行显示6对地址-值，与从站保持一致
             const count = data.length;
             const rows = Math.ceil(count / pairsPerRow);
 
+            const headerRowBoxLayout = new QBoxLayout(Direction.LeftToRight);
             // 添加标题行
             for (let col = 0; col < pairsPerRow; col++) {
                 const addrHeaderLabel = new QLabel();
+                addrHeaderLabel.setFixedHeight(40);
                 addrHeaderLabel.setText(`地址`);
                 addrHeaderLabel.setStyleSheet("font-weight: bold; color: #333333; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; padding: 5px; background-color: #f5f5f5;");
 
                 const valueHeaderLabel = new QLabel();
+                valueHeaderLabel.setFixedHeight(40);
+                valueHeaderLabel.setFixedWidth(120);
                 valueHeaderLabel.setText(`值`);
                 valueHeaderLabel.setStyleSheet("font-weight: bold; color: #333333; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; padding: 5px; background-color: #f5f5f5;");
 
-                newDataGridLayout.addWidget(addrHeaderLabel, 0, col * 2);
-                newDataGridLayout.addWidget(valueHeaderLabel, 0, col * 2 + 1);
+                headerRowBoxLayout.addWidget(addrHeaderLabel);
+                headerRowBoxLayout.addWidget(valueHeaderLabel);
 
                 currentDataLabels.push(addrHeaderLabel);
                 currentDataLabels.push(valueHeaderLabel);
             }
+            colBoxLayout.addLayout(headerRowBoxLayout);
 
             // 填充数据
             for (let row = 0; row < rows; row++) {
+                const rowBoxLayout = new QBoxLayout(Direction.LeftToRight);
                 for (let col = 0; col < pairsPerRow; col++) {
                     const index = row * pairsPerRow + col;
-                    if (index >= count) break;
+                    if (index >= count) {
+                        // 创建空的地址标签
+                        const addressLabel = new QLabel();
+                        addressLabel.setFixedHeight(40);
+                        addressLabel.setText("");
+                        addressLabel.setStyleSheet("padding: 5px; color: #555555; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #fafafa;");
+                        rowBoxLayout.addWidget(addressLabel);
+
+                        // 创建空的值标签
+                        const valueLabel = new QLabel();
+                        valueLabel.setFixedHeight(40);
+                        valueLabel.setFixedWidth(120);
+                        valueLabel.setText("");
+                        valueLabel.setStyleSheet("padding: 5px; color: #888888; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #f8f8f8;");
+                        rowBoxLayout.addWidget(valueLabel);
+                        continue;
+                    }
 
                     const addr = address + index;
 
                     // 创建地址标签
                     const addressLabel = new QLabel();
+                    addressLabel.setFixedHeight(40);
                     addressLabel.setText(addr.toString());
                     addressLabel.setStyleSheet("padding: 5px; color: #555555; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #fafafa;");
-                    newDataGridLayout.addWidget(addressLabel, row + 1, col * 2);
+                    rowBoxLayout.addWidget(addressLabel);
                     currentDataLabels.push(addressLabel);
 
                     // 检查是否为多寄存器数据类型的第二个及后续寄存器
@@ -860,6 +947,8 @@ class ModbusTestApp {
 
                     // 创建值标签
                     const valueLabel = new QLabel();
+                    valueLabel.setFixedHeight(40);
+                    valueLabel.setFixedWidth(120);
 
                     // 如果是多寄存器数据类型的第二个及后续寄存器，显示'-'
                     if (isSecondaryRegister) {
@@ -883,11 +972,13 @@ class ModbusTestApp {
                         valueLabel.setStyleSheet("padding: 5px; color: #000000; background-color: #f8f8f8; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc;");
                     }
 
-                    newDataGridLayout.addWidget(valueLabel, row + 1, col * 2 + 1);
+                    rowBoxLayout.addWidget(valueLabel);
                     currentDataLabels.push(valueLabel);
                 }
+                colBoxLayout.addLayout(rowBoxLayout);
             }
 
+            colBoxLayout.addStretch(1);
             // 更新滚动区域的widget
             dataTable.setWidget(newDataWidget);
         };
@@ -951,10 +1042,16 @@ class ModbusTestApp {
             try {
                 this.client.setID(writeSlaveIdSpin.value());
                 const address = writeAddressSpin.value();
-                const valueText = writeValueEdit.text();
+                const valueText = writeValueEdit.value().toString();
                 const functionCode = writeFunctionCombo.currentIndex();
                 const functionText = writeFunctionCombo.currentText();
                 const dataType = writeDataTypeCombo.currentText();
+
+                // 验证输入值范围
+                if (!this.validateInputValue(valueText, dataType)) {
+                    this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 错误: 输入值 "${valueText}" 超出 ${dataType} 类型的有效范围\n`);
+                    return;
+                }
 
                 this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 写入数据: ${functionText}, 从站ID: ${writeSlaveIdSpin.value()}, 地址: ${address}, 值: ${valueText}\n`);
 
@@ -1083,6 +1180,7 @@ class ModbusTestApp {
         const refreshBtn = new QPushButton();
         refreshBtn.setText("刷新");
         refreshBtn.setDefault(true);
+        refreshBtn.setFixedWidth(100);
 
         // 单行布局
         displayLayout.addWidget(startAddrLabel);
@@ -1111,8 +1209,9 @@ class ModbusTestApp {
         const writeAddrLabel = new QLabel();
         writeAddrLabel.setFixedWidth(65);
         writeAddrLabel.setText("写入地址:");
-        const writeAddrInput = new QLineEdit();
-        writeAddrInput.setPlaceholderText("地址");
+        const writeAddrInput = new QSpinBox();
+        writeAddrInput.setMinimum(0);
+        writeAddrInput.setMaximum(65535);
         writeAddrInput.setFixedWidth(130);
 
         const writeTypeLabel = new QLabel();
@@ -1133,9 +1232,71 @@ class ModbusTestApp {
         const writeValueLabel = new QLabel();
         writeValueLabel.setText("值:");
         writeValueLabel.setFixedWidth(20);
-        const writeValueInput = new QLineEdit();
-        writeValueInput.setPlaceholderText("数值");
-        writeValueInput.setMaximumWidth(120);
+        const writeValueInput = new QDoubleSpinBox();
+        writeValueInput.setValue(0);
+        writeValueInput.setDecimals(6);
+        writeValueInput.setMinimum(-2147483648);
+        writeValueInput.setMaximum(2147483647);
+
+        // 为写入值输入框设置数据类型范围验证
+        const updateSlaveWriteValueRange = () => {
+            const dataType = writeTypeCombo.currentText();
+            switch (dataType) {
+                case "Bool":
+                    writeValueInput.setMinimum(0);
+                    writeValueInput.setMaximum(1);
+                    writeValueInput.setDecimals(0);
+
+                    break;
+                case "Int16":
+                    writeValueInput.setMinimum(-32768);
+                    writeValueInput.setMaximum(32767);
+                    writeValueInput.setDecimals(0);
+
+                    break;
+                case "UInt16":
+                    writeValueInput.setMinimum(0);
+                    writeValueInput.setMaximum(65535);
+                    writeValueInput.setDecimals(0);
+
+                    break;
+                case "Int32":
+                    writeValueInput.setMinimum(-2147483648);
+                    writeValueInput.setMaximum(2147483647);
+                    writeValueInput.setDecimals(0);
+
+                    break;
+                case "UInt32":
+                    writeValueInput.setMinimum(0);
+                    writeValueInput.setMaximum(4294967295);
+                    writeValueInput.setDecimals(0);
+
+                    break;
+                case "Float32":
+                    writeValueInput.setMinimum(-3.4028235e+38);
+                    writeValueInput.setMaximum(3.4028235e+38);
+                    writeValueInput.setDecimals(3);
+
+                    break;
+                case "Float64":
+                    writeValueInput.setMinimum(-1.7976931348623157e+308);
+                    writeValueInput.setMaximum(1.7976931348623157e+308);
+                    writeValueInput.setDecimals(4);
+
+                    break;
+                default:
+                    writeValueInput.setMinimum(-2147483648);
+                    writeValueInput.setMaximum(2147483647);
+                    writeValueInput.setDecimals(0);
+
+            }
+        };
+
+        // 初始设置范围
+        updateSlaveWriteValueRange();
+
+        // 监听数据类型变化
+        writeTypeCombo.addEventListener('currentTextChanged', updateSlaveWriteValueRange);
 
         const writeBtn = new QPushButton();
         writeBtn.setText("写入");
@@ -1156,33 +1317,32 @@ class ModbusTestApp {
         writeBtn.addEventListener('clicked', () => {
             const address = parseInt(writeAddrInput.text()) || 0;
             const dataType = writeTypeCombo.currentIndex();
-            const inputValue = writeValueInput.text();
+            const inputValue = writeValueInput.value().toString();
             const isLittleEndian = writeEndianCombo.currentIndex() === 1;
+            const dataTypeName = writeTypeCombo.currentText();
 
             if (address < 0 || address >= 65536) {
                 this.slaveLogText!.append(`地址错误: ${address} (需要0-65535)\n`);
                 return;
             }
 
+            // 验证输入值范围
+            if (!this.validateInputValue(inputValue, dataTypeName)) {
+                this.slaveLogText!.append(`输入值错误: "${inputValue}" 超出 ${dataTypeName} 类型的有效范围\n`);
+                return;
+            }
+
             switch (dataType) {
                 case 0: // 保持寄存器(UInt16)
                     const holdingValue = parseInt(inputValue) || 0;
-                    if (holdingValue >= 0 && holdingValue <= 65535) {
-                        holdingRegisters[address] = holdingValue;
-                        this.slaveLogText!.append(`写入保持寄存器: 地址=${address}, 值=${holdingValue}\n`);
-                    } else {
-                        this.slaveLogText!.append(`保持寄存器值错误: ${inputValue} (需要0-65535)\n`);
-                    }
+                    holdingRegisters[address] = holdingValue;
+                    this.slaveLogText!.append(`写入保持寄存器: 地址=${address}, 值=${holdingValue}\n`);
                     break;
 
                 case 1: // 输入寄存器(UInt16)
                     const inputRegValue = parseInt(inputValue) || 0;
-                    if (inputRegValue >= 0 && inputRegValue <= 65535) {
-                        inputRegisters[address] = inputRegValue;
-                        this.slaveLogText!.append(`写入输入寄存器: 地址=${address}, 值=${inputRegValue}\n`);
-                    } else {
-                        this.slaveLogText!.append(`输入寄存器值错误: ${inputValue} (需要0-65535)\n`);
-                    }
+                    inputRegisters[address] = inputRegValue;
+                    this.slaveLogText!.append(`写入输入寄存器: 地址=${address}, 值=${inputRegValue}\n`);
                     break;
 
                 case 2: // 线圈(Bool)
@@ -1193,17 +1353,13 @@ class ModbusTestApp {
 
                 case 3: // Int16
                     const int16Value = parseInt(inputValue) || 0;
-                    if (int16Value >= -32768 && int16Value <= 32767) {
-                        holdingRegisters[address] = int16Value < 0 ? 65536 + int16Value : int16Value;
-                        this.slaveLogText!.append(`写入Int16: 地址=${address}, 值=${int16Value}\n`);
-                    } else {
-                        this.slaveLogText!.append(`Int16值错误: ${inputValue} (需要-32768到32767)\n`);
-                    }
+                    holdingRegisters[address] = int16Value < 0 ? 65536 + int16Value : int16Value;
+                    this.slaveLogText!.append(`写入Int16: 地址=${address}, 值=${int16Value}\n`);
                     break;
 
                 case 4: // Int32
                     const int32Value = parseInt(inputValue) || 0;
-                    if (int32Value >= -2147483648 && int32Value <= 2147483647 && address < 65535) {
+                    if (address < 65535) {
                         const uint32Value = int32Value < 0 ? 4294967296 + int32Value : int32Value;
                         if (isLittleEndian) {
                             holdingRegisters[address] = uint32Value & 0xFFFF;
@@ -1214,13 +1370,13 @@ class ModbusTestApp {
                         }
                         this.slaveLogText!.append(`写入Int32: 地址=${address}, 值=${int32Value}\n`);
                     } else {
-                        this.slaveLogText!.append(`Int32值错误或地址不足: ${inputValue}\n`);
+                        this.slaveLogText!.append(`Int32地址不足: ${address} (需要连续2个寄存器)\n`);
                     }
                     break;
 
                 case 5: // UInt32
                     const uint32Value = parseInt(inputValue) || 0;
-                    if (uint32Value >= 0 && uint32Value <= 4294967295 && address < 65535) {
+                    if (address < 65535) {
                         if (isLittleEndian) {
                             holdingRegisters[address] = uint32Value & 0xFFFF;
                             holdingRegisters[address + 1] = (uint32Value >> 16) & 0xFFFF;
@@ -1230,13 +1386,13 @@ class ModbusTestApp {
                         }
                         this.slaveLogText!.append(`写入UInt32: 地址=${address}, 值=${uint32Value}\n`);
                     } else {
-                        this.slaveLogText!.append(`UInt32值错误或地址不足: ${inputValue}\n`);
+                        this.slaveLogText!.append(`UInt32地址不足: ${address} (需要连续2个寄存器)\n`);
                     }
                     break;
 
                 case 6: // Float32
                     const float32Value = parseFloat(inputValue) || 0;
-                    if (!isNaN(float32Value) && address < 65535) {
+                    if (address < 65535) {
                         const buffer = new ArrayBuffer(4);
                         const floatView = new Float32Array(buffer);
                         const uint16View = new Uint16Array(buffer);
@@ -1250,13 +1406,13 @@ class ModbusTestApp {
                         }
                         this.slaveLogText!.append(`写入Float32: 地址=${address}, 值=${float32Value}\n`);
                     } else {
-                        this.slaveLogText!.append(`Float32值错误或地址不足: ${inputValue}\n`);
+                        this.slaveLogText!.append(`Float32地址不足: ${address} (需要连续2个寄存器)\n`);
                     }
                     break;
 
                 case 7: // Float64
                     const float64Value = parseFloat(inputValue) || 0;
-                    if (!isNaN(float64Value) && address < 65533) {
+                    if (address < 65533) {
                         const buffer = new ArrayBuffer(8);
                         const doubleView = new Float64Array(buffer);
                         const uint16View = new Uint16Array(buffer);
@@ -1274,14 +1430,14 @@ class ModbusTestApp {
                         }
                         this.slaveLogText!.append(`写入Float64: 地址=${address}, 值=${float64Value}\n`);
                     } else {
-                        this.slaveLogText!.append(`Float64值错误或地址不足: ${inputValue}\n`);
+                        this.slaveLogText!.append(`Float64地址不足: ${address} (需要连续4个寄存器)\n`);
                     }
                     break;
             }
 
             // 刷新表格显示
             initializeTable();
-            writeValueInput.clear();
+            writeValueInput.setValue(0);
         });
 
         // 添加数据写入组件的折叠事件监听器
@@ -1343,48 +1499,69 @@ class ModbusTestApp {
 
             // 清除现有组件（通过重新创建滚动区域内容）
             const newScrollWidget = new QWidget();
-            const newGridLayout = new QGridLayout();
+            const colBoxLayout = new QBoxLayout(Direction.TopToBottom);
+            colBoxLayout.setSpacing(0);
+            colBoxLayout.setContentsMargins(0, 0, 0, 0);
 
-            // 设置间距，允许留白
-            newGridLayout.setSpacing(0);
-            newGridLayout.setContentsMargins(0, 0, 0, 0);
-
-            newScrollWidget.setLayout(newGridLayout);
+            newScrollWidget.setLayout(colBoxLayout);
             scrollArea.setWidget(newScrollWidget);
 
             // 计算行数
             const rows = Math.ceil(count / pairsPerRow);
 
+            const headerRowBoxLayout = new QBoxLayout(Direction.LeftToRight);
             // 添加标题行
             for (let col = 0; col < pairsPerRow; col++) {
                 const addrHeaderLabel = new QLabel();
+                addrHeaderLabel.setFixedHeight(40);
                 addrHeaderLabel.setText(`地址`);
                 addrHeaderLabel.setStyleSheet("font-weight: bold; color: #333333; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; padding: 5px; background-color: #f5f5f5;");
 
                 const valueHeaderLabel = new QLabel();
+                valueHeaderLabel.setFixedHeight(40);
+                valueHeaderLabel.setFixedWidth(120)
                 valueHeaderLabel.setText(`值`);
                 valueHeaderLabel.setStyleSheet("font-weight: bold; color: #333333; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; padding: 5px; background-color: #f5f5f5;");
 
-                newGridLayout.addWidget(addrHeaderLabel, 0, col * 2);
-                newGridLayout.addWidget(valueHeaderLabel, 0, col * 2 + 1);
+                headerRowBoxLayout.addWidget(addrHeaderLabel);
+                headerRowBoxLayout.addWidget(valueHeaderLabel);
 
                 addressLabels.push(addrHeaderLabel);
                 valueLabels.push(valueHeaderLabel);
             }
+            colBoxLayout.addLayout(headerRowBoxLayout);
 
             // 填充数据
             for (let row = 0; row < rows; row++) {
+                const rowBoxLayout = new QBoxLayout(Direction.LeftToRight);
                 for (let col = 0; col < pairsPerRow; col++) {
                     const index = row * pairsPerRow + col;
-                    if (index >= count) break;
+                    if (index >= count) {
+                        // 创建空的地址标签
+                        const addressLabel = new QLabel();
+                        addressLabel.setFixedHeight(40);
+                        addressLabel.setText("");
+                        addressLabel.setStyleSheet("padding: 5px; color: #555555; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #fafafa;");
+                        rowBoxLayout.addWidget(addressLabel);
+
+                        // 创建空的值标签
+                        const valueLabel = new QLabel();
+                        valueLabel.setFixedHeight(40);
+                        valueLabel.setFixedWidth(120)
+                        valueLabel.setText("");
+                        valueLabel.setStyleSheet("padding: 5px; color: #888888; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #f8f8f8;");
+                        rowBoxLayout.addWidget(valueLabel);
+                        continue;
+                    }
 
                     const addr = startAddr + index;
 
                     // 创建地址标签
                     const addressLabel = new QLabel();
+                    addressLabel.setFixedHeight(40);
                     addressLabel.setText(addr.toString());
                     addressLabel.setStyleSheet("padding: 5px; color: #555555; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #fafafa;");
-                    newGridLayout.addWidget(addressLabel, row + 1, col * 2);
+                    rowBoxLayout.addWidget(addressLabel);
                     addressLabels.push(addressLabel);
 
                     // 检查是否为多寄存器数据类型的第二个及后续寄存器
@@ -1398,6 +1575,8 @@ class ModbusTestApp {
 
                     // 创建值标签
                     const valueLabel = new QLabel();
+                    valueLabel.setFixedHeight(40);
+                    valueLabel.setFixedWidth(120)
 
                     // 如果是多寄存器数据类型的第二个及后续寄存器，显示'-'
                     if (isSecondaryRegister) {
@@ -1443,7 +1622,7 @@ class ModbusTestApp {
                                             buffer.writeUInt16LE(holdingRegisters[addr + 1], 0);
                                             buffer.writeUInt16LE(holdingRegisters[addr], 2);
                                         }
-                                        displayValue = buffer.readFloatBE(0).toFixed(6);
+                                        displayValue = buffer.readFloatBE(0).toFixed(4);
                                     }
                                     break;
                                 case "Float64":
@@ -1458,7 +1637,7 @@ class ModbusTestApp {
                                                 buffer.writeUInt16LE(holdingRegisters[addr + 3 - j], j * 2);
                                             }
                                         }
-                                        displayValue = buffer.readDoubleBE(0).toFixed(10);
+                                        displayValue = buffer.readDoubleBE(0).toFixed(4);
                                     }
                                     break;
                             }
@@ -1470,10 +1649,13 @@ class ModbusTestApp {
                         valueLabel.setStyleSheet("padding: 5px; color: #000000; background-color: #f8f8f8; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc;");
                     }
 
-                    newGridLayout.addWidget(valueLabel, row + 1, col * 2 + 1);
+                    rowBoxLayout.addWidget(valueLabel);
                     valueLabels.push(valueLabel);
                 }
+                colBoxLayout.addLayout(rowBoxLayout);
             }
+
+            colBoxLayout.addStretch(1);
         };
 
         // 自动刷新定时器
@@ -1738,7 +1920,7 @@ class ModbusTestApp {
                     buffer.writeUInt16BE(high, 0);
                     buffer.writeUInt16BE(low, 2);
                     const val = buffer.readFloatBE(0);
-                    results.push(val.toFixed(6));
+                    results.push(val.toFixed(4));
                 }
                 break;
             default:
@@ -1749,10 +1931,53 @@ class ModbusTestApp {
     }
 
 
+    private validateInputValue(valueStr: string, dataType: string): boolean {
+        if (!valueStr || valueStr.trim() === '') {
+            return false;
+        }
+
+        const trimmedValue = valueStr.trim();
+
+        switch (dataType) {
+            case "Bool":
+                return trimmedValue === '0' || trimmedValue === '1' ||
+                    trimmedValue.toLowerCase() === 'true' || trimmedValue.toLowerCase() === 'false';
+            case "Int16":
+                const int16 = parseInt(trimmedValue);
+                return !isNaN(int16) && int16 >= -32768 && int16 <= 32767;
+            case "UInt16":
+                const uint16 = parseInt(trimmedValue);
+                return !isNaN(uint16) && uint16 >= 0 && uint16 <= 65535;
+            case "Int32":
+                const int32 = parseInt(trimmedValue);
+                return !isNaN(int32) && int32 >= -2147483648 && int32 <= 2147483647;
+            case "UInt32":
+                const uint32 = parseInt(trimmedValue);
+                return !isNaN(uint32) && uint32 >= 0 && uint32 <= 4294967295;
+            case "Float32":
+                const float32 = parseFloat(trimmedValue);
+                return !isNaN(float32) && isFinite(float32) &&
+                    Math.abs(float32) <= 3.4028235e+38;
+            case "Float64":
+                const float64 = parseFloat(trimmedValue);
+                return !isNaN(float64) && isFinite(float64) &&
+                    Math.abs(float64) <= 1.7976931348623157e+308;
+            default:
+                return !isNaN(parseFloat(trimmedValue));
+        }
+    }
+
     private parseValue(valueStr: string, dataType: string): number | number[] {
         const value = parseFloat(valueStr);
 
         switch (dataType) {
+            case "Bool":
+                // Bool类型转换为0或1
+                if (valueStr.toLowerCase() === 'true' || valueStr === '1') {
+                    return 1;
+                } else {
+                    return 0;
+                }
             case "Int16":
                 return Math.max(-32768, Math.min(32767, Math.round(value)));
             case "UInt16":

@@ -2,7 +2,6 @@
 # Modbus测试工具
 
 一个基于NodeGUI开发的跨平台Modbus协议测试工具，支持TCP和RTU两种通信方式，提供主站和从站功能。
-![image.png](./assets/connect.png)
 ![image.png](./assets/master.png)
 ![image.png](./assets/slave.png)
 
