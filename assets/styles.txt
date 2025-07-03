@@ -1,0 +1,135 @@
+/* 主窗口样式 */
+QMainWindow {
+  background-color: #f8f9fa;
+  color: #333333;
+}
+
+/* 分组框样式 */
+QGroupBox {
+  font-weight: 500;
+  font-size: 13px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-top: 20px;
+  padding-top: 12px;
+  background-color: white;
+}
+
+QGroupBox::title {
+  subcontrol-origin: margin;
+  left: 10px;
+  margin-top:10px;
+  border: 1px solid #e0e0e0;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-weight: 500;
+  background-color: white;
+  color: #333333;
+}
+
+QGroupBox:checked {
+  border-color: #6c9bd1;
+}
+
+QGroupBox::title:checked {
+  border: 1px solid #6c9bd1;
+}
+
+
+
+/* 输入框样式 - 原生简单风格 */
+QLineEdit,
+QComboBox {
+  /* 使用系统原生样式，仅设置基本字体 */
+  font-size: 13px;
+}
+
+/* 移除自定义样式，使用原生外观 */
+
+/* 数字输入框样式 - 原生简单风格 */
+QSpinBox {
+  /* 使用系统原生样式，仅设置基本字体 */
+  font-size: 13px;
+}
+
+/* 移除自定义样式，使用原生外观 */
+
+/* 文本编辑器样式 */
+
+
+/* 滚动区域样式 */
+QScrollArea {
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  background-color: white;
+}
+
+QScrollBar:vertical {
+  background-color: #f8f9fa;
+  width: 10px;
+  border-radius: 5px;
+}
+
+QScrollBar::handle:vertical {
+  background-color: #ced4da;
+  border-radius: 5px;
+  min-height: 20px;
+  margin: 1px;
+}
+
+QScrollBar::handle:vertical:hover {
+  background-color: #adb5bd;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+  height: 0;
+}
+
+
+/* 标签页样式 */
+QTabWidget::pane {
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  background-color: white;
+  margin-top: -1px;
+}
+
+QTabBar::tab {
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-bottom: none;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+  padding: 10px 16px;
+  margin-right: 1px;
+  font-weight: 500;
+  font-size: 13px;
+  color: #495057;
+}
+
+QTabBar::tab:selected {
+  background-color: white;
+  border-color: #6c9bd1;
+  color: #6c9bd1;
+}
+
+QTabBar::tab:hover:!selected {
+  background-color: #e9ecef;
+}
+
+/* 标签样式 */
+QLabel {
+  color: #495057;
+  font-size: 13px;
+}
+
+/* 状态标签特殊样式 */
+QLabel[text*="状态:"] {
+  font-weight: 500;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 3px;
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+}

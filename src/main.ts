@@ -1,22 +1,31 @@
 import {
     Direction,
+    QAction,
+    QApplication,
     QBoxLayout,
     QCheckBox,
     QComboBox,
+    QDialog,
     QGridLayout,
     QGroupBox,
     QIcon,
+    QKeySequence,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
+    QMenuBar,
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QStyleFactory,
     QTabWidget,
     QTextEdit,
     QWidget
 } from '@nodegui/nodegui';
+import * as fs from 'fs';
 import ModbusRTU, { ServerTCP } from 'modbus-serial';
+import * as path from 'path';
 import sourceMapSupport from 'source-map-support';
 
 sourceMapSupport.install();
@@ -45,9 +54,26 @@ class ModbusTestApp {
         port: 502
     };
 
+    // 添加连接状态相关的UI组件引用
+
+    private quickConnectAction: QAction | null = null;
+    private disconnectAction: QAction | null = null;
+    private connectionDialog: QDialog | null = null;
+    private tabWidget: QTabWidget | null = null;
+    private isSlaveRunning = false;
+
+    // 日志组件引用
+    private masterLogText: QTextEdit | null = null;
+    private slaveLogText: QTextEdit | null = null;
+    private masterLogGroup: QGroupBox | null = null;
+    private slaveLogGroup: QGroupBox | null = null;
+
     constructor() {
         this.client = new ModbusRTU();
         this.win = new QMainWindow();
+        // console.log(QStyleFactory.keys());
+
+        QApplication.setStyle(QStyleFactory.create('macOS'));
         this.setupUI();
     }
 
@@ -55,85 +81,99 @@ class ModbusTestApp {
         this.win.setWindowTitle("Modbus测试工具");
         this.win.resize(1000, 700);
 
+        // 创建菜单栏
+        this.createMenuBar();
+
         const centralWidget = new QWidget();
         const mainLayout = new QBoxLayout(Direction.TopToBottom);
         centralWidget.setLayout(mainLayout);
 
-        // 创建标签页
-        const tabWidget = new QTabWidget();
+        // 连接状态指示器将在主站面板中创建
 
-        // 连接配置标签页
-        const connectionTab = this.createConnectionTab();
-        tabWidget.addTab(connectionTab, new QIcon(), "连接配置");
+        // 创建标签页（移除连接配置标签页）
+        this.tabWidget = new QTabWidget();
 
         // 主站功能标签页
         const masterTab = this.createMasterTab();
-        tabWidget.addTab(masterTab, new QIcon(), "主站功能");
+        this.tabWidget.addTab(masterTab, new QIcon(), "主站功能");
 
         // 从站功能标签页
         const slaveTab = this.createSlaveTab();
-        tabWidget.addTab(slaveTab, new QIcon(), "从站功能");
+        this.tabWidget.addTab(slaveTab, new QIcon(), "从站功能");
 
-        mainLayout.addWidget(tabWidget);
+        // 创建状态指示器并更新标签页标题
+        this.createTabStatusIndicators();
+
+        mainLayout.addWidget(this.tabWidget);
         this.win.setCentralWidget(centralWidget);
 
-        this.win.setStyleSheet(`
-      QMainWindow {
-        background-color: #f0f0f0;
-      }
-      QGroupBox {
-        font-weight: bold;
-        border: 2px solid #cccccc;
-        border-radius: 5px;
-        margin-top: 1ex;
-        padding-top: 10px;
-      }
-      QGroupBox::title {
-        subcontrol-origin: margin;
-        left: 10px;
-        padding: 0 5px 0 5px;
-      }
-      QPushButton {
-        background-color: #4CAF50;
-        border: none;
-        color: white;
-        padding: 8px 16px;
-        border-radius: 4px;
-        font-weight: bold;
-      }
-      QPushButton:hover {
-        background-color: #45a049;
-      }
-      QPushButton:pressed {
-        background-color: #3d8b40;
-      }
-      QPushButton:disabled {
-        background-color: #cccccc;
-        color: #666666;
-      }
-      QLineEdit, QComboBox, QSpinBox {
-        padding: 5px;
-        border: 1px solid #ddd;
-        border-radius: 3px;
-      }
-      QExpandingLineEdit {
-        padding: 5px;
-        border: 1px solid #ddd;
-        border-radius: 3px;
-      }
-      QTextEdit {
-        border: 1px solid #ddd;
-        border-radius: 3px;
-      }
-    `);
-
+        this.loadStyleSheet();
         this.win.show();
     }
 
-    private createConnectionTab(): QWidget {
-        const widget = new QWidget();
+    private createMenuBar(): void {
+        const menuBar = new QMenuBar();
+
+        // 连接菜单
+        const connectionMenu = new QMenu();
+        connectionMenu.setTitle("连接");
+
+        // 连接配置动作
+        const configAction = new QAction();
+        configAction.setText("连接配置...");
+        configAction.setShortcut(new QKeySequence("Ctrl+C"));
+        configAction.addEventListener('triggered', () => {
+            this.showConnectionDialog();
+        });
+
+        // 快速连接动作
+        this.quickConnectAction = new QAction();
+        this.quickConnectAction.setText("快速连接");
+        this.quickConnectAction.setShortcut(new QKeySequence("Ctrl+Q"));
+        this.quickConnectAction.addEventListener('triggered', () => {
+            this.quickConnect();
+        });
+
+        // 断开连接动作
+        this.disconnectAction = new QAction();
+        this.disconnectAction.setText("断开连接");
+        this.disconnectAction.setShortcut(new QKeySequence("Ctrl+D"));
+        this.disconnectAction.setEnabled(false);
+        this.disconnectAction.addEventListener('triggered', () => {
+            this.disconnect();
+        });
+
+        connectionMenu.addAction(configAction);
+        connectionMenu.addSeparator();
+        connectionMenu.addAction(this.quickConnectAction);
+        connectionMenu.addAction(this.disconnectAction);
+
+        // 日志菜单
+        const logMenu = new QMenu();
+        logMenu.setTitle("日志");
+
+        // 显示/隐藏日志动作
+        const toggleLogsAction = new QAction();
+        toggleLogsAction.setText("显示/隐藏日志");
+        toggleLogsAction.setShortcut(new QKeySequence("Ctrl+H"));
+        toggleLogsAction.addEventListener('triggered', () => {
+            this.toggleLogVisibility();
+        });
+
+        logMenu.addAction(toggleLogsAction);
+
+        menuBar.addMenu(connectionMenu);
+        menuBar.addMenu(logMenu);
+        this.win.setMenuBar(menuBar);
+    }
+
+    private showConnectionDialog(): void {
+        const dialog = new QDialog();
+        dialog.setWindowTitle("连接配置");
+        dialog.resize(400, 500);
+
         const layout = new QBoxLayout(Direction.TopToBottom);
-        widget.setLayout(layout);
+        dialog.setLayout(layout);
 
         // 连接类型选择
         const typeGroup = new QGroupBox();
@@ -145,6 +185,7 @@ class ModbusTestApp {
         typeLabel.setText("协议类型:");
         const typeCombo = new QComboBox();
         typeCombo.addItems(["Modbus TCP", "Modbus RTU"]);
+        typeCombo.setCurrentText(this.config.type === 'TCP' ? "Modbus TCP" : "Modbus RTU");
 
         typeLayout.addWidget(typeLabel, 0, 0);
         typeLayout.addWidget(typeCombo, 0, 1);
@@ -158,13 +199,13 @@ class ModbusTestApp {
         const hostLabel = new QLabel();
         hostLabel.setText("IP地址:");
         const hostEdit = new QLineEdit();
-        hostEdit.setText("127.0.0.1");
+        hostEdit.setText(this.config.host || "127.0.0.1");
 
         const portLabel = new QLabel();
         portLabel.setText("端口号:");
         const portSpin = new QSpinBox();
         portSpin.setRange(1, 65535);
-        portSpin.setValue(502);
+        portSpin.setValue(this.config.port || 502);
 
         tcpLayout.addWidget(hostLabel, 0, 0);
         tcpLayout.addWidget(hostEdit, 0, 1);
@@ -180,31 +221,31 @@ class ModbusTestApp {
         const portNameLabel = new QLabel();
         portNameLabel.setText("串口:");
         const portNameEdit = new QLineEdit();
-        portNameEdit.setText("/dev/ttyUSB0");
+        portNameEdit.setText(this.config.serialPort || "/dev/ttyUSB0");
 
         const baudLabel = new QLabel();
         baudLabel.setText("波特率:");
         const baudCombo = new QComboBox();
         baudCombo.addItems(["9600", "19200", "38400", "57600", "115200"]);
-        baudCombo.setCurrentText("9600");
+        baudCombo.setCurrentText((this.config.baudRate || 9600).toString());
 
         const dataBitsLabel = new QLabel();
         dataBitsLabel.setText("数据位:");
         const dataBitsCombo = new QComboBox();
         dataBitsCombo.addItems(["7", "8"]);
-        dataBitsCombo.setCurrentText("8");
+        dataBitsCombo.setCurrentText((this.config.dataBits || 8).toString());
 
         const stopBitsLabel = new QLabel();
         stopBitsLabel.setText("停止位:");
         const stopBitsCombo = new QComboBox();
         stopBitsCombo.addItems(["1", "2"]);
-        stopBitsCombo.setCurrentText("1");
+        stopBitsCombo.setCurrentText((this.config.stopBits || 1).toString());
 
         const parityLabel = new QLabel();
         parityLabel.setText("校验位:");
         const parityCombo = new QComboBox();
         parityCombo.addItems(["none", "even", "odd"]);
-        parityCombo.setCurrentText("none");
+        parityCombo.setCurrentText(this.config.parity || "none");
 
         rtuLayout.addWidget(portNameLabel, 0, 0);
         rtuLayout.addWidget(portNameEdit, 0, 1);
@@ -217,86 +258,211 @@ class ModbusTestApp {
         rtuLayout.addWidget(parityLabel, 4, 0);
         rtuLayout.addWidget(parityCombo, 4, 1);
 
-        // 连接按钮
+        // 按钮
+        const buttonLayout = new QBoxLayout(Direction.LeftToRight);
+        const okBtn = new QPushButton();
+        okBtn.setText("确定");
+        const cancelBtn = new QPushButton();
+        cancelBtn.setText("取消");
         const connectBtn = new QPushButton();
         connectBtn.setText("连接");
 
-        const disconnectBtn = new QPushButton();
-        disconnectBtn.setText("断开连接");
-        disconnectBtn.setEnabled(false);
-
-        // 状态显示
-        const statusLabel = new QLabel();
-        statusLabel.setText("状态: 未连接");
-        statusLabel.setStyleSheet("color: red; font-weight: bold;");
+        buttonLayout.addStretch();
+        buttonLayout.addWidget(connectBtn);
+        buttonLayout.addWidget(okBtn);
+        buttonLayout.addWidget(cancelBtn);
 
         // 事件处理
         typeCombo.addEventListener('currentTextChanged', (text: string) => {
             const isTCP = text === "Modbus TCP";
             tcpGroup.setEnabled(isTCP);
             rtuGroup.setEnabled(!isTCP);
-            this.config.type = isTCP ? 'TCP' : 'RTU';
-        });
-
-        connectBtn.addEventListener('clicked', async () => {
-            try {
-                if (this.config.type === 'TCP') {
-                    this.config.host = hostEdit.text();
-                    this.config.port = portSpin.value();
-                    await this.client.connectTCP(this.config.host, { port: this.config.port, timeout: 5000 });
-                } else {
-                    this.config.serialPort = portNameEdit.text();
-                    this.config.baudRate = parseInt(baudCombo.currentText());
-                    this.config.dataBits = parseInt(dataBitsCombo.currentText()) as 7 | 8;
-                    this.config.stopBits = parseInt(stopBitsCombo.currentText()) as 1 | 2;
-                    this.config.parity = parityCombo.currentText() as 'none' | 'even' | 'odd' | 'mark' | 'space';
-
-                    await this.client.connectRTUBuffered(this.config.serialPort, {
-                        baudRate: this.config.baudRate,
-                        dataBits: this.config.dataBits,
-                        stopBits: this.config.stopBits,
-                        parity: this.config.parity
-                    });
-                }
-
-                this.isConnected = true;
-                statusLabel.setText("状态: 已连接");
-                statusLabel.setStyleSheet("color: green; font-weight: bold;");
-                connectBtn.setEnabled(false);
-                disconnectBtn.setEnabled(true);
-                this.startConnectionCheck(statusLabel, connectBtn, disconnectBtn);
-            } catch (error) {
-                statusLabel.setText(`状态: 连接失败 - ${error}`);
-                statusLabel.setStyleSheet("color: red; font-weight: bold;");
-            }
-        });
-
-        disconnectBtn.addEventListener('clicked', () => {
-            this.stopConnectionCheck();
-            this.client.close(() => {
-                this.isConnected = false;
-                statusLabel.setText("状态: 未连接");
-                statusLabel.setStyleSheet("color: red; font-weight: bold;");
-                connectBtn.setEnabled(true);
-                disconnectBtn.setEnabled(false);
-            });
         });
 
         // 初始状态
-        rtuGroup.setEnabled(false);
+        const isTCP = this.config.type === 'TCP';
+        tcpGroup.setEnabled(isTCP);
+        rtuGroup.setEnabled(!isTCP);
+
+        okBtn.addEventListener('clicked', () => {
+            // 保存配置
+            const isTCP = typeCombo.currentText() === "Modbus TCP";
+            this.config.type = isTCP ? 'TCP' : 'RTU';
+
+            if (isTCP) {
+                this.config.host = hostEdit.text();
+                this.config.port = portSpin.value();
+            } else {
+                this.config.serialPort = portNameEdit.text();
+                this.config.baudRate = parseInt(baudCombo.currentText());
+                this.config.dataBits = parseInt(dataBitsCombo.currentText()) as 7 | 8;
+                this.config.stopBits = parseInt(stopBitsCombo.currentText()) as 1 | 2;
+                this.config.parity = parityCombo.currentText() as 'none' | 'even' | 'odd' | 'mark' | 'space';
+            }
+
+            dialog.close();
+        });
+
+        cancelBtn.addEventListener('clicked', () => {
+            dialog.close();
+        });
+
+        connectBtn.addEventListener('clicked', async () => {
+            // 保存配置并连接
+            const isTCP = typeCombo.currentText() === "Modbus TCP";
+            this.config.type = isTCP ? 'TCP' : 'RTU';
+
+            if (isTCP) {
+                this.config.host = hostEdit.text();
+                this.config.port = portSpin.value();
+            } else {
+                this.config.serialPort = portNameEdit.text();
+                this.config.baudRate = parseInt(baudCombo.currentText());
+                this.config.dataBits = parseInt(dataBitsCombo.currentText()) as 7 | 8;
+                this.config.stopBits = parseInt(stopBitsCombo.currentText()) as 1 | 2;
+                this.config.parity = parityCombo.currentText() as 'none' | 'even' | 'odd' | 'mark' | 'space';
+            }
+
+            await this.quickConnect();
+            dialog.close();
+        });
+
         layout.addWidget(typeGroup);
         layout.addWidget(tcpGroup);
         layout.addWidget(rtuGroup);
-
-        const buttonLayout = new QBoxLayout(Direction.LeftToRight);
-        buttonLayout.addWidget(connectBtn);
-        buttonLayout.addWidget(disconnectBtn);
-        buttonLayout.addWidget(statusLabel);
-
         layout.addLayout(buttonLayout);
-        layout.addStretch();
 
-        return widget;
+        dialog.exec();
+    }
+
+    private async quickConnect(): Promise<void> {
+        // 创建连接状态弹出框
+        this.connectionDialog = new QDialog();
+        this.connectionDialog.setWindowTitle("连接状态");
+        this.connectionDialog.setModal(true);
+        this.connectionDialog.setFixedSize(300, 150);
+
+        const dialogLayout = new QBoxLayout(Direction.TopToBottom);
+        this.connectionDialog.setLayout(dialogLayout);
+
+        const statusLabel = new QLabel();
+        statusLabel.setText("正在连接...");
+        statusLabel.setAlignment(0x0004); // AlignCenter
+        statusLabel.setStyleSheet("font-size: 14px; padding: 20px;");
+
+        dialogLayout.addWidget(statusLabel);
+
+        // 显示弹出框
+        this.connectionDialog.show();
+
+        try {
+            if (this.config.type === 'TCP') {
+                await this.client.connectTCP(this.config.host!, { port: this.config.port!, timeout: 5000 });
+            } else {
+                await this.client.connectRTUBuffered(this.config.serialPort!, {
+                    baudRate: this.config.baudRate!,
+                    dataBits: this.config.dataBits!,
+                    stopBits: this.config.stopBits!,
+                    parity: this.config.parity!
+                });
+            }
+
+            this.isConnected = true;
+
+            // 更新标签页状态点
+            this.updateTabTitles();
+
+            // 显示连接成功信息
+            statusLabel.setText("连接成功！");
+            statusLabel.setStyleSheet("font-size: 14px; padding: 20px; color: green;");
+
+            // 更新菜单状态
+            this.updateMenuState();
+
+            // 启动连接检测
+            this.startConnectionCheck();
+
+            // 1秒后关闭弹出框
+            setTimeout(() => {
+                if (this.connectionDialog) {
+                    this.connectionDialog.close();
+                    this.connectionDialog = null;
+                }
+            }, 1000);
+
+        } catch (error) {
+            // 提取并格式化错误信息
+            let errorMessage = "未知错误";
+            if (error instanceof Error) {
+                errorMessage = error.message;
+            } else if (typeof error === 'string') {
+                errorMessage = error;
+            } else if (error && typeof error === 'object') {
+                errorMessage = error.toString();
+            }
+
+            // 限制错误信息长度，确保完整显示
+            if (errorMessage.length > 100) {
+                errorMessage = errorMessage.substring(0, 97) + "...";
+            }
+
+            // 调整弹出框大小以适应错误信息
+            this.connectionDialog.setFixedSize(350, 200);
+
+            // 显示连接失败信息
+            statusLabel.setText(`连接失败:\n${errorMessage}`);
+            statusLabel.setStyleSheet("font-size: 12px; padding: 15px; color: red; word-wrap: break-word;");
+            statusLabel.setWordWrap(true);
+
+            // 添加关闭按钮
+            const closeBtn = new QPushButton();
+            closeBtn.setText("关闭");
+            closeBtn.addEventListener('clicked', () => {
+                if (this.connectionDialog) {
+                    this.connectionDialog.close();
+                    this.connectionDialog = null;
+                }
+            });
+            dialogLayout.addWidget(closeBtn);
+        }
+    }
+
+    private disconnect(): void {
+        this.stopConnectionCheck();
+        this.client.close(() => {
+            this.isConnected = false;
+
+            // 更新标签页状态点
+            this.updateTabTitles();
+
+            this.updateMenuState();
+        });
+    }
+
+    private updateMenuState(): void {
+        if (this.quickConnectAction && this.disconnectAction) {
+            this.quickConnectAction.setEnabled(!this.isConnected);
+            this.disconnectAction.setEnabled(this.isConnected);
+        }
+    }
+
+    private createTabStatusIndicators(): void {
+        if (!this.tabWidget) return;
+
+        // 使用简单的文本方式在标签页标题中添加状态点
+        this.updateTabTitles();
+    }
+
+    private updateTabTitles(): void {
+        if (!this.tabWidget) return;
+
+        // 主站状态：连接时显示小绿点，未连接时只显示文字
+        const masterTitle = this.isConnected ? "主站功能 ●" : "主站功能";
+        this.tabWidget.setTabText(0, masterTitle);
+
+        // 从站状态：启动时显示小绿点，未启动时只显示文字
+        const slaveTitle = this.isSlaveRunning ? "从站功能 ●" : "从站功能";
+        this.tabWidget.setTabText(1, slaveTitle);
     }
 
     private createMasterTab(): QWidget {
@@ -309,134 +475,163 @@ class ModbusTestApp {
         readConfigGroup.setTitle("读取配置 ");
         readConfigGroup.setCheckable(true);
         readConfigGroup.setChecked(true);
-        const readConfigLayout = new QGridLayout();
+        readConfigGroup.setMaximumHeight(120); // 适当增加高度
+        const readConfigLayout = new QBoxLayout(Direction.LeftToRight);
+        readConfigLayout.setSpacing(10); // 增加间距
+        readConfigLayout.setContentsMargins(12, 12, 12, 12); // 增加边距
         readConfigGroup.setLayout(readConfigLayout);
 
+        // 控件尺寸优化
         const readSlaveIdLabel = new QLabel();
-        readSlaveIdLabel.setText("从站ID:");
+        readSlaveIdLabel.setFixedWidth(20);
+        readSlaveIdLabel.setText("ID:"); // 简化标签文本
         const readSlaveIdSpin = new QSpinBox();
         readSlaveIdSpin.setRange(1, 247);
         readSlaveIdSpin.setValue(1);
+        readSlaveIdSpin.setMaximumWidth(60); // 更小的宽度
 
         const readFunctionLabel = new QLabel();
-        readFunctionLabel.setText("功能码:");
+        readFunctionLabel.setText("功能:");
+        readFunctionLabel.setFixedWidth(30);
         const readFunctionCombo = new QComboBox();
-        readFunctionCombo.addItems(["03 - 保持寄存器", "04 - 输入寄存器", "01 - 线圈", "02 - 离散输入"]);
+        readFunctionCombo.addItems(["03-保持", "04-输入", "01-线圈", "02-离散"]); // 简化选项文本
+        readFunctionCombo.setMaximumWidth(130);
 
         const readAddressLabel = new QLabel();
-        readAddressLabel.setText("起始地址:");
+        readAddressLabel.setText("地址:");
+        readAddressLabel.setFixedWidth(30);
         const readAddressSpin = new QSpinBox();
         readAddressSpin.setRange(0, 65535);
         readAddressSpin.setValue(0);
+        readAddressSpin.setMaximumWidth(70);
 
         const readLengthLabel = new QLabel();
-        readLengthLabel.setText("读取长度:");
+        readLengthLabel.setText("长度:");
+        readLengthLabel.setFixedWidth(30);
         const readLengthSpin = new QSpinBox();
         readLengthSpin.setRange(1, 125);
-        readLengthSpin.setValue(10);
+        readLengthSpin.setValue(20);
+        readLengthSpin.setMaximumWidth(60);
 
         const readDataTypeLabel = new QLabel();
-        readDataTypeLabel.setText("数据类型:");
+        readDataTypeLabel.setText("类型:");
+        readDataTypeLabel.setFixedWidth(30);
         const readDataTypeCombo = new QComboBox();
         readDataTypeCombo.addItems(["Int16", "UInt16", "Int32", "UInt32", "Float32", "Float64"]);
+        readDataTypeCombo.setMaximumWidth(80);
 
         const readEndianLabel = new QLabel();
-        readEndianLabel.setText("字节序:");
+        readEndianLabel.setText("序:");
+        readEndianLabel.setFixedWidth(20);
         const readEndianCombo = new QComboBox();
         readEndianCombo.addItems(["大端", "小端"]);
+        readEndianCombo.setFixedWidth(80);
 
-        const autoReadLabel = new QLabel();
-        autoReadLabel.setText("定时读取:");
         const autoReadCheck = new QCheckBox();
-        autoReadCheck.setText("启用");
+        autoReadCheck.setFixedWidth(50);
+        autoReadCheck.setText("定时");
 
-        const intervalLabel = new QLabel();
-        intervalLabel.setText("间隔(ms):");
         const intervalSpin = new QSpinBox();
         intervalSpin.setRange(100, 10000);
         intervalSpin.setValue(1000);
         intervalSpin.setEnabled(false);
+        intervalSpin.setMaximumWidth(70);
+        intervalSpin.setSuffix("ms");
 
         const readBtn = new QPushButton();
-        readBtn.setText("读取数据");
+        readBtn.setDefault(true);
+        readBtn.setText("读取");
 
-        readConfigLayout.addWidget(readSlaveIdLabel, 0, 0);
-        readConfigLayout.addWidget(readSlaveIdSpin, 0, 1);
-        readConfigLayout.addWidget(readFunctionLabel, 0, 2);
-        readConfigLayout.addWidget(readFunctionCombo, 0, 3);
-        readConfigLayout.addWidget(readAddressLabel, 1, 0);
-        readConfigLayout.addWidget(readAddressSpin, 1, 1);
-        readConfigLayout.addWidget(readLengthLabel, 1, 2);
-        readConfigLayout.addWidget(readLengthSpin, 1, 3);
-        readConfigLayout.addWidget(readDataTypeLabel, 2, 0);
-        readConfigLayout.addWidget(readDataTypeCombo, 2, 1);
-        readConfigLayout.addWidget(readEndianLabel, 2, 2);
-        readConfigLayout.addWidget(readEndianCombo, 2, 3);
-        readConfigLayout.addWidget(autoReadLabel, 3, 0);
-        readConfigLayout.addWidget(autoReadCheck, 3, 1);
-        readConfigLayout.addWidget(intervalLabel, 3, 2);
-        readConfigLayout.addWidget(intervalSpin, 3, 3);
-        readConfigLayout.addWidget(readBtn, 4, 0, 1, 4);
+        // 单行紧凑布局
+        readConfigLayout.addWidget(readSlaveIdLabel);
+        readConfigLayout.addWidget(readSlaveIdSpin);
+        readConfigLayout.addWidget(readFunctionLabel);
+        readConfigLayout.addWidget(readFunctionCombo);
+        readConfigLayout.addWidget(readAddressLabel);
+        readConfigLayout.addWidget(readAddressSpin);
+        readConfigLayout.addWidget(readLengthLabel);
+        readConfigLayout.addWidget(readLengthSpin);
+        readConfigLayout.addWidget(readDataTypeLabel);
+        readConfigLayout.addWidget(readDataTypeCombo);
+        readConfigLayout.addWidget(readEndianLabel);
+        readConfigLayout.addWidget(readEndianCombo);
+        readConfigLayout.addWidget(autoReadCheck);
+        readConfigLayout.addWidget(intervalSpin);
+        readConfigLayout.addWidget(readBtn);
 
         // 写入配置区域
         const writeConfigGroup = new QGroupBox();
         writeConfigGroup.setTitle("写入配置");
         writeConfigGroup.setCheckable(true);
         writeConfigGroup.setChecked(true);
-        const writeConfigLayout = new QGridLayout();
+        writeConfigGroup.setMaximumHeight(100); // 适当增加高度
+        const writeConfigLayout = new QBoxLayout(Direction.LeftToRight);
+        writeConfigLayout.setSpacing(10);
+        writeConfigLayout.setContentsMargins(12, 12, 12, 12);
         writeConfigGroup.setLayout(writeConfigLayout);
 
+        // 写入控件优化
         const writeSlaveIdLabel = new QLabel();
-        writeSlaveIdLabel.setText("从站ID:");
+        writeSlaveIdLabel.setText("ID:");
+        writeSlaveIdLabel.setFixedWidth(20);
         const writeSlaveIdSpin = new QSpinBox();
         writeSlaveIdSpin.setValue(1);
+        writeSlaveIdSpin.setMaximumWidth(60);
 
         const writeFunctionLabel = new QLabel();
-        writeFunctionLabel.setText("功能码:");
+        writeFunctionLabel.setText("功能:");
+        writeFunctionLabel.setFixedWidth(30);
         const writeFunctionCombo = new QComboBox();
-        writeFunctionCombo.addItems(["06 - 写单个寄存器", "16 - 写多个寄存器", "05 - 写单个线圈", "15 - 写多个线圈"]);
+        writeFunctionCombo.addItems(["06-单寄存器", "16-多寄存器", "05-单线圈", "15-多线圈"]);
 
         const writeAddressLabel = new QLabel();
         writeAddressLabel.setText("地址:");
+        writeAddressLabel.setFixedWidth(30);
         const writeAddressSpin = new QSpinBox();
         writeAddressSpin.setValue(0);
+        writeAddressSpin.setMaximumWidth(70);
 
         const writeValueLabel = new QLabel();
-        writeValueLabel.setText("写入值:");
+        writeValueLabel.setText("值:");
+        writeValueLabel.setFixedWidth(20);
         const writeValueEdit = new QLineEdit();
         writeValueEdit.setText("0");
+        writeValueEdit.setMaximumWidth(80);
 
         const writeDataTypeLabel = new QLabel();
-        writeDataTypeLabel.setText("数据类型:");
+        writeDataTypeLabel.setText("类型:");
+        writeDataTypeLabel.setFixedWidth(30);
         const writeDataTypeCombo = new QComboBox();
         writeDataTypeCombo.addItems(["Int16", "UInt16", "Int32", "UInt32", "Float32", "Float64"]);
 
-        const writeBtn = new QPushButton();
-        writeBtn.setText("写入数据");
 
-        writeConfigLayout.addWidget(writeSlaveIdLabel, 0, 0);
-        writeConfigLayout.addWidget(writeSlaveIdSpin, 0, 1);
-        writeConfigLayout.addWidget(writeFunctionLabel, 0, 2);
-        writeConfigLayout.addWidget(writeFunctionCombo, 0, 3);
-        writeConfigLayout.addWidget(writeAddressLabel, 0, 4);
-        writeConfigLayout.addWidget(writeAddressSpin, 0, 5);
-        writeConfigLayout.addWidget(writeValueLabel, 1, 0);
-        writeConfigLayout.addWidget(writeValueEdit, 1, 1);
-        writeConfigLayout.addWidget(writeDataTypeLabel, 1, 2);
-        writeConfigLayout.addWidget(writeDataTypeCombo, 1, 3);
-        writeConfigLayout.addWidget(writeBtn, 1, 4);
+        const writeBtn = new QPushButton();
+        writeBtn.setText("写入");
+        writeBtn.setFixedWidth(100);
+        writeBtn.setDefault(true);
+
+        // 单行布局
+        writeConfigLayout.addWidget(writeSlaveIdLabel);
+        writeConfigLayout.addWidget(writeSlaveIdSpin);
+        writeConfigLayout.addWidget(writeFunctionLabel);
+        writeConfigLayout.addWidget(writeFunctionCombo);
+        writeConfigLayout.addWidget(writeAddressLabel);
+        writeConfigLayout.addWidget(writeAddressSpin);
+        writeConfigLayout.addWidget(writeValueLabel);
+        writeConfigLayout.addWidget(writeValueEdit);
+        writeConfigLayout.addWidget(writeDataTypeLabel);
+        writeConfigLayout.addWidget(writeDataTypeCombo);
+        writeConfigLayout.addWidget(writeBtn);
 
         // 数据显示表格区域
         const dataDisplayGroup = new QGroupBox();
         dataDisplayGroup.setTitle("数据显示");
-        dataDisplayGroup.setCheckable(true);
-        dataDisplayGroup.setChecked(true);
         const dataDisplayLayout = new QBoxLayout(Direction.TopToBottom);
         dataDisplayGroup.setLayout(dataDisplayLayout);
 
         const dataTable = new QScrollArea();
         dataTable.setWidgetResizable(true);
-        dataTable.setMaximumHeight(300);
+
         dataTable.setStyleSheet("QScrollArea { border: 1px solid #ccc; background-color: white; }");
 
         const dataWidget = new QWidget();
@@ -444,21 +639,78 @@ class ModbusTestApp {
         dataWidget.setLayout(dataGridLayout);
         dataTable.setWidget(dataWidget);
 
+        // 初始化默认表格显示
+        const initializeDefaultDataTable = () => {
+            // 清空现有内容
+            const newDataWidget = new QWidget();
+            const newDataGridLayout = new QGridLayout();
+            newDataGridLayout.setSpacing(0);
+            newDataGridLayout.setContentsMargins(0, 0, 0, 0);
+            newDataWidget.setLayout(newDataGridLayout);
+
+            const pairsPerRow = 6;
+            const defaultCount = 20; // 默认显示10个地址
+            const rows = Math.ceil(defaultCount / pairsPerRow);
+
+            // 添加标题行
+            for (let col = 0; col < pairsPerRow; col++) {
+                const addrHeaderLabel = new QLabel();
+                addrHeaderLabel.setText(`地址`);
+                addrHeaderLabel.setStyleSheet("font-weight: bold; color: #333333; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; padding: 5px; background-color: #f5f5f5;");
+
+                const valueHeaderLabel = new QLabel();
+                valueHeaderLabel.setText(`值`);
+                valueHeaderLabel.setStyleSheet("font-weight: bold; color: #333333; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; padding: 5px; background-color: #f5f5f5;");
+
+                newDataGridLayout.addWidget(addrHeaderLabel, 0, col * 2);
+                newDataGridLayout.addWidget(valueHeaderLabel, 0, col * 2 + 1);
+            }
+
+            // 填充默认数据
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < pairsPerRow; col++) {
+                    const index = row * pairsPerRow + col;
+                    if (index >= defaultCount) break;
+
+                    const addr = index;
+
+                    // 创建地址标签
+                    const addressLabel = new QLabel();
+                    addressLabel.setText(addr.toString());
+                    addressLabel.setStyleSheet("padding: 5px; color: #555555; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #fafafa;");
+                    newDataGridLayout.addWidget(addressLabel, row + 1, col * 2);
+
+                    // 创建值标签
+                    const valueLabel = new QLabel();
+                    valueLabel.setText("--");
+                    valueLabel.setStyleSheet("padding: 5px; color: #888888; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #f8f8f8;");
+                    newDataGridLayout.addWidget(valueLabel, row + 1, col * 2 + 1);
+                }
+            }
+
+            dataTable.setWidget(newDataWidget);
+        };
+
+        // 初始化默认表格
+        initializeDefaultDataTable();
+
         dataDisplayLayout.addWidget(dataTable);
 
-        // 操作日志
-        const logGroup = new QGroupBox();
-        logGroup.setTitle("操作日志");
-        logGroup.setCheckable(true);
-        logGroup.setChecked(true);
-        const logLayout = new QBoxLayout(Direction.TopToBottom);
-        logGroup.setLayout(logLayout);
+        // 主站操作日志
+        this.masterLogGroup = new QGroupBox();
+        this.masterLogGroup.setTitle("操作日志 ");
+        this.masterLogGroup.setCheckable(true);
+        this.masterLogGroup.setChecked(true);
 
-        const logText = new QTextEdit();
-        logText.setReadOnly(true);
-        logText.setMaximumHeight(200);
-        logText.setStyleSheet("font-family: 'Courier New', monospace; font-size: 12px; background-color: #f8f8f8;");
-        logLayout.addWidget(logText);
+        const logLayout = new QBoxLayout(Direction.TopToBottom);
+        this.masterLogGroup.setLayout(logLayout);
+
+        this.masterLogText = new QTextEdit();
+        this.masterLogText.setReadOnly(true);
+        this.masterLogText.setMinimumHeight(150);
+        this.masterLogText.setMaximumHeight(300);
+        this.masterLogText.setStyleSheet("font-family: 'Courier New', monospace; font-size: 12px; background-color: #f8f8f8;");
+        logLayout.addWidget(this.masterLogText);
 
         const clearLogBtn = new QPushButton();
         clearLogBtn.setText("清空日志");
@@ -486,9 +738,7 @@ class ModbusTestApp {
             readDataTypeCombo.setVisible(!readConfigCollapsed);
             readEndianLabel.setVisible(!readConfigCollapsed);
             readEndianCombo.setVisible(!readConfigCollapsed);
-            autoReadLabel.setVisible(!readConfigCollapsed);
             autoReadCheck.setVisible(!readConfigCollapsed);
-            intervalLabel.setVisible(!readConfigCollapsed);
             intervalSpin.setVisible(!readConfigCollapsed);
             readBtn.setVisible(!readConfigCollapsed);
         });
@@ -510,16 +760,10 @@ class ModbusTestApp {
             writeBtn.setVisible(!writeConfigCollapsed);
         });
 
-        dataDisplayGroup.addEventListener('clicked', () => {
-            dataDisplayCollapsed = !dataDisplayCollapsed;
-            dataDisplayGroup.setTitle(dataDisplayCollapsed ? "数据显示" : "数据显示 ");
-            dataTable.setVisible(!dataDisplayCollapsed);
-        });
-
-        logGroup.addEventListener('clicked', () => {
+        this.masterLogGroup.addEventListener('clicked', () => {
             logCollapsed = !logCollapsed;
-            logGroup.setTitle(logCollapsed ? "操作日志" : "操作日志 ");
-            logText.setVisible(!logCollapsed);
+            this.masterLogGroup.setTitle(logCollapsed ? "操作日志" : "操作日志 ");
+            this.masterLogText!.setVisible(!logCollapsed);
             clearLogBtn.setVisible(!logCollapsed);
         });
 
@@ -650,13 +894,13 @@ class ModbusTestApp {
 
         // 清空日志按钮事件
         clearLogBtn.addEventListener('clicked', () => {
-            logText.clear();
+            this.masterLogText!.clear();
         });
 
         // 读取数据事件处理
         readBtn.addEventListener('clicked', async () => {
             if (!this.isConnected) {
-                logText.append(`[${new Date().toLocaleTimeString()}] 错误: 请先连接到Modbus设备\n`);
+                this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 错误: 请先连接到Modbus设备\n`);
                 return;
             }
 
@@ -669,7 +913,7 @@ class ModbusTestApp {
                 const dataType = readDataTypeCombo.currentText();
                 const isLittleEndian = readEndianCombo.currentIndex() === 1;
 
-                logText.append(`[${new Date().toLocaleTimeString()}] 读取数据: ${functionText}, 从站ID: ${readSlaveIdSpin.value()},  地址: ${address}, 长度: ${length}\n`);
+                this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 读取数据: ${functionText}, 从站ID: ${readSlaveIdSpin.value()},  地址: ${address}, 长度: ${length}\n`);
 
                 let result: any;
                 switch (functionCode) {
@@ -691,16 +935,16 @@ class ModbusTestApp {
                 updateDataTable(address, result.data, dataType, isLittleEndian);
 
                 const formattedData = this.formatData(result.data, dataType, !isLittleEndian);
-                logText.append(`[${new Date().toLocaleTimeString()}] 读取成功 - 数据: ${formattedData}\n\n`);
+                this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 读取成功 - 数据: ${formattedData}\n\n`);
             } catch (error) {
-                logText.append(`[${new Date().toLocaleTimeString()}] 读取失败: ${error}\n\n`);
+                this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 读取失败: ${error}\n\n`);
             }
         });
 
         // 写入数据事件处理
         writeBtn.addEventListener('clicked', async () => {
             if (!this.isConnected) {
-                logText.append(`[${new Date().toLocaleTimeString()}] 错误: 请先连接到Modbus设备\n`);
+                this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 错误: 请先连接到Modbus设备\n`);
                 return;
             }
 
@@ -712,7 +956,7 @@ class ModbusTestApp {
                 const functionText = writeFunctionCombo.currentText();
                 const dataType = writeDataTypeCombo.currentText();
 
-                logText.append(`[${new Date().toLocaleTimeString()}] 写入数据: ${functionText}, 从站ID: ${writeSlaveIdSpin.value()}, 地址: ${address}, 值: ${valueText}\n`);
+                this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 写入数据: ${functionText}, 从站ID: ${writeSlaveIdSpin.value()}, 地址: ${address}, 值: ${valueText}\n`);
 
                 const value = this.parseValue(valueText, dataType);
 
@@ -731,15 +975,14 @@ class ModbusTestApp {
                         break;
                 }
 
-                logText.append(`[${new Date().toLocaleTimeString()}] 写入成功\n\n`);
+                this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 写入成功\n\n`);
             } catch (error) {
-                logText.append(`[${new Date().toLocaleTimeString()}] 写入失败: ${error}\n\n`);
+                this.masterLogText!.append(`[${new Date().toLocaleTimeString()}] 写入失败: ${error}\n\n`);
             }
         })
         layout.addWidget(readConfigGroup);
         layout.addWidget(writeConfigGroup);
         layout.addWidget(dataDisplayGroup);
-        layout.addWidget(logGroup);
 
         return widget;
     }
@@ -754,93 +997,308 @@ class ModbusTestApp {
         slaveGroup.setTitle("从站配置 ");
         slaveGroup.setCheckable(true);
         slaveGroup.setChecked(true);
-        const slaveLayout = new QGridLayout();
+        slaveGroup.setMaximumHeight(90); // 适当增加高度
+        const slaveLayout = new QBoxLayout(Direction.LeftToRight);
+        slaveLayout.setSpacing(10);
+        slaveLayout.setContentsMargins(12, 12, 12, 12);
         slaveGroup.setLayout(slaveLayout);
 
         const slavePortLabel = new QLabel();
-        slavePortLabel.setText("监听端口:");
+        slavePortLabel.setText("端口:");
+        slavePortLabel.setFixedWidth(50);
+
         const slavePortSpin = new QSpinBox();
-        slavePortSpin.setRange(1, 65535);
+        slavePortSpin.setRange(0, 65535);
         slavePortSpin.setValue(502);
 
         const slaveIdLabel = new QLabel();
-        slaveIdLabel.setText("从站ID:");
+        slaveIdLabel.setText("ID:");
+        slaveIdLabel.setFixedWidth(50);
         const slaveIdSpin = new QSpinBox();
-        slaveIdSpin.setRange(1, 247);
         slaveIdSpin.setValue(1);
 
         const startSlaveBtn = new QPushButton();
-        startSlaveBtn.setText("启动从站");
+        startSlaveBtn.setText("启动");
+        startSlaveBtn.setDefault(true);
 
         const stopSlaveBtn = new QPushButton();
-        stopSlaveBtn.setText("停止从站");
+        stopSlaveBtn.setText("停止");
         stopSlaveBtn.setEnabled(false);
 
-        slaveLayout.addWidget(slavePortLabel, 0, 0);
-        slaveLayout.addWidget(slavePortSpin, 0, 1);
-        slaveLayout.addWidget(slaveIdLabel, 0, 2);
-        slaveLayout.addWidget(slaveIdSpin, 0, 3);
-        slaveLayout.addWidget(startSlaveBtn, 0, 4);
-        slaveLayout.addWidget(stopSlaveBtn, 0, 5);
+        // 单行布局
+        slaveLayout.addWidget(slavePortLabel);
+        slaveLayout.addWidget(slavePortSpin);
+        slaveLayout.addWidget(slaveIdLabel);
+        slaveLayout.addWidget(slaveIdSpin);
+        slaveLayout.addWidget(startSlaveBtn);
+        slaveLayout.addWidget(stopSlaveBtn);
 
         // 显示配置区域
         const displayGroup = new QGroupBox();
         displayGroup.setTitle("显示配置 ");
         displayGroup.setCheckable(true);
         displayGroup.setChecked(true);
-        const displayLayout = new QGridLayout();
+        displayGroup.setMaximumHeight(120); // 适当增加高度
+        const displayLayout = new QBoxLayout(Direction.LeftToRight);
+        displayLayout.setSpacing(10);
+        displayLayout.setContentsMargins(12, 12, 12, 12);
         displayGroup.setLayout(displayLayout);
 
+        // 显示配置控件优化
         const startAddrLabel = new QLabel();
-        startAddrLabel.setText("起始地址:");
+        startAddrLabel.setText("地址:");
         const startAddrSpin = new QSpinBox();
-        startAddrSpin.setRange(0, 65535);
+        startAddrLabel.setFixedWidth(50);
         startAddrSpin.setValue(0);
 
         const countLabel = new QLabel();
-        countLabel.setText("显示数量:");
+        countLabel.setText("数量:");
+        countLabel.setFixedWidth(50);
         const countSpin = new QSpinBox();
-        countSpin.setRange(1, 100);
         countSpin.setValue(20);
 
         const displayTypeLabel = new QLabel();
-        displayTypeLabel.setText("显示类型:");
+        displayTypeLabel.setText("类型:");
+        displayTypeLabel.setFixedWidth(50);
         const displayTypeCombo = new QComboBox();
         displayTypeCombo.addItems(["Bool", "Int16", "UInt16", "Int32", "UInt32", "Float32", "Float64"]);
+        displayTypeCombo.setFixedWidth(130);
 
         const endianLabel = new QLabel();
-        endianLabel.setText("字节序:");
+        endianLabel.setText("序:");
+        endianLabel.setFixedWidth(20);
         const endianCombo = new QComboBox();
         endianCombo.addItems(["大端", "小端"]);
+        endianCombo.setFixedWidth(100);
 
-        const autoRefreshLabel = new QLabel();
-        autoRefreshLabel.setText("自动刷新:");
         const autoRefreshCheck = new QCheckBox();
-        autoRefreshCheck.setText("启用");
+        autoRefreshCheck.setText("自动");
+        autoRefreshCheck.setFixedWidth(50);
 
-        const refreshIntervalLabel = new QLabel();
-        refreshIntervalLabel.setText("刷新间隔(ms):");
         const refreshIntervalSpin = new QSpinBox();
-        refreshIntervalSpin.setRange(100, 10000);
         refreshIntervalSpin.setValue(1000);
         refreshIntervalSpin.setEnabled(false);
+        refreshIntervalSpin.setSuffix("ms");
 
         const refreshBtn = new QPushButton();
-        refreshBtn.setText("手动刷新");
+        refreshBtn.setText("刷新");
+        refreshBtn.setDefault(true);
 
-        displayLayout.addWidget(startAddrLabel, 0, 0);
-        displayLayout.addWidget(startAddrSpin, 0, 1);
-        displayLayout.addWidget(countLabel, 0, 2);
-        displayLayout.addWidget(countSpin, 0, 3);
-        displayLayout.addWidget(displayTypeLabel, 1, 0);
-        displayLayout.addWidget(displayTypeCombo, 1, 1);
-        displayLayout.addWidget(endianLabel, 1, 2);
-        displayLayout.addWidget(endianCombo, 1, 3);
-        displayLayout.addWidget(autoRefreshLabel, 2, 0);
-        displayLayout.addWidget(autoRefreshCheck, 2, 1);
-        displayLayout.addWidget(refreshIntervalLabel, 2, 2);
-        displayLayout.addWidget(refreshIntervalSpin, 2, 3);
-        displayLayout.addWidget(refreshBtn, 2, 4);
+        // 单行布局
+        displayLayout.addWidget(startAddrLabel);
+        displayLayout.addWidget(startAddrSpin);
+        displayLayout.addWidget(countLabel);
+        displayLayout.addWidget(countSpin);
+        displayLayout.addWidget(displayTypeLabel);
+        displayLayout.addWidget(displayTypeCombo);
+        displayLayout.addWidget(endianLabel);
+        displayLayout.addWidget(endianCombo);
+        displayLayout.addWidget(autoRefreshCheck);
+        displayLayout.addWidget(refreshIntervalSpin);
+        displayLayout.addWidget(refreshBtn);
+
+
+        // 数据写入区域
+        const writeGroup = new QGroupBox();
+        writeGroup.setTitle("数据写入 ");
+        writeGroup.setCheckable(true);
+        writeGroup.setChecked(true);
+        writeGroup.setMaximumHeight(100);
+        const writeLayout = new QBoxLayout(Direction.LeftToRight);
+        writeLayout.setSpacing(15);
+        writeLayout.setContentsMargins(12, 12, 12, 12);
+        writeGroup.setLayout(writeLayout);
+        const writeAddrLabel = new QLabel();
+        writeAddrLabel.setFixedWidth(65);
+        writeAddrLabel.setText("写入地址:");
+        const writeAddrInput = new QLineEdit();
+        writeAddrInput.setPlaceholderText("地址");
+        writeAddrInput.setFixedWidth(130);
+
+        const writeTypeLabel = new QLabel();
+        writeTypeLabel.setText("数据类型:");
+        writeTypeLabel.setFixedWidth(65);
+
+        const writeTypeCombo = new QComboBox();
+        writeTypeCombo.addItems(["UInt16", "UInt16", "Bool", "Int16", "Int32", "UInt32", "Float32", "Float64"]);
+        writeTypeCombo.setMaximumWidth(150);
+
+        const writeEndianLabel = new QLabel();
+        writeEndianLabel.setText("字节序:");
+        writeEndianLabel.setFixedWidth(50);
+        const writeEndianCombo = new QComboBox();
+        writeEndianCombo.addItems(["大端", "小端"]);
+        writeEndianCombo.setMaximumWidth(150);
+
+        const writeValueLabel = new QLabel();
+        writeValueLabel.setText("值:");
+        writeValueLabel.setFixedWidth(20);
+        const writeValueInput = new QLineEdit();
+        writeValueInput.setPlaceholderText("数值");
+        writeValueInput.setMaximumWidth(120);
+
+        const writeBtn = new QPushButton();
+        writeBtn.setText("写入");
+        writeBtn.setFixedWidth(100);
+        writeBtn.setDefault(true);
+
+        writeLayout.addWidget(writeAddrLabel);
+        writeLayout.addWidget(writeAddrInput);
+        writeLayout.addWidget(writeTypeLabel);
+        writeLayout.addWidget(writeTypeCombo);
+        writeLayout.addWidget(writeEndianLabel);
+        writeLayout.addWidget(writeEndianCombo);
+        writeLayout.addWidget(writeValueLabel);
+        writeLayout.addWidget(writeValueInput);
+        writeLayout.addWidget(writeBtn);
+
+        // 统一写入按钮事件
+        writeBtn.addEventListener('clicked', () => {
+            const address = parseInt(writeAddrInput.text()) || 0;
+            const dataType = writeTypeCombo.currentIndex();
+            const inputValue = writeValueInput.text();
+            const isLittleEndian = writeEndianCombo.currentIndex() === 1;
+
+            if (address < 0 || address >= 65536) {
+                this.slaveLogText!.append(`地址错误: ${address} (需要0-65535)\n`);
+                return;
+            }
+
+            switch (dataType) {
+                case 0: // 保持寄存器(UInt16)
+                    const holdingValue = parseInt(inputValue) || 0;
+                    if (holdingValue >= 0 && holdingValue <= 65535) {
+                        holdingRegisters[address] = holdingValue;
+                        this.slaveLogText!.append(`写入保持寄存器: 地址=${address}, 值=${holdingValue}\n`);
+                    } else {
+                        this.slaveLogText!.append(`保持寄存器值错误: ${inputValue} (需要0-65535)\n`);
+                    }
+                    break;
+
+                case 1: // 输入寄存器(UInt16)
+                    const inputRegValue = parseInt(inputValue) || 0;
+                    if (inputRegValue >= 0 && inputRegValue <= 65535) {
+                        inputRegisters[address] = inputRegValue;
+                        this.slaveLogText!.append(`写入输入寄存器: 地址=${address}, 值=${inputRegValue}\n`);
+                    } else {
+                        this.slaveLogText!.append(`输入寄存器值错误: ${inputValue} (需要0-65535)\n`);
+                    }
+                    break;
+
+                case 2: // 线圈(Bool)
+                    const coilValue = inputValue.toLowerCase() === 'true' || inputValue === '1';
+                    coils[address] = coilValue;
+                    this.slaveLogText!.append(`写入线圈: 地址=${address}, 值=${coilValue}\n`);
+                    break;
+
+                case 3: // Int16
+                    const int16Value = parseInt(inputValue) || 0;
+                    if (int16Value >= -32768 && int16Value <= 32767) {
+                        holdingRegisters[address] = int16Value < 0 ? 65536 + int16Value : int16Value;
+                        this.slaveLogText!.append(`写入Int16: 地址=${address}, 值=${int16Value}\n`);
+                    } else {
+                        this.slaveLogText!.append(`Int16值错误: ${inputValue} (需要-32768到32767)\n`);
+                    }
+                    break;
+
+                case 4: // Int32
+                    const int32Value = parseInt(inputValue) || 0;
+                    if (int32Value >= -2147483648 && int32Value <= 2147483647 && address < 65535) {
+                        const uint32Value = int32Value < 0 ? 4294967296 + int32Value : int32Value;
+                        if (isLittleEndian) {
+                            holdingRegisters[address] = uint32Value & 0xFFFF;
+                            holdingRegisters[address + 1] = (uint32Value >> 16) & 0xFFFF;
+                        } else {
+                            holdingRegisters[address] = (uint32Value >> 16) & 0xFFFF;
+                            holdingRegisters[address + 1] = uint32Value & 0xFFFF;
+                        }
+                        this.slaveLogText!.append(`写入Int32: 地址=${address}, 值=${int32Value}\n`);
+                    } else {
+                        this.slaveLogText!.append(`Int32值错误或地址不足: ${inputValue}\n`);
+                    }
+                    break;
+
+                case 5: // UInt32
+                    const uint32Value = parseInt(inputValue) || 0;
+                    if (uint32Value >= 0 && uint32Value <= 4294967295 && address < 65535) {
+                        if (isLittleEndian) {
+                            holdingRegisters[address] = uint32Value & 0xFFFF;
+                            holdingRegisters[address + 1] = (uint32Value >> 16) & 0xFFFF;
+                        } else {
+                            holdingRegisters[address] = (uint32Value >> 16) & 0xFFFF;
+                            holdingRegisters[address + 1] = uint32Value & 0xFFFF;
+                        }
+                        this.slaveLogText!.append(`写入UInt32: 地址=${address}, 值=${uint32Value}\n`);
+                    } else {
+                        this.slaveLogText!.append(`UInt32值错误或地址不足: ${inputValue}\n`);
+                    }
+                    break;
+
+                case 6: // Float32
+                    const float32Value = parseFloat(inputValue) || 0;
+                    if (!isNaN(float32Value) && address < 65535) {
+                        const buffer = new ArrayBuffer(4);
+                        const floatView = new Float32Array(buffer);
+                        const uint16View = new Uint16Array(buffer);
+                        floatView[0] = float32Value;
+                        if (isLittleEndian) {
+                            holdingRegisters[address] = uint16View[0];
+                            holdingRegisters[address + 1] = uint16View[1];
+                        } else {
+                            holdingRegisters[address] = uint16View[1];
+                            holdingRegisters[address + 1] = uint16View[0];
+                        }
+                        this.slaveLogText!.append(`写入Float32: 地址=${address}, 值=${float32Value}\n`);
+                    } else {
+                        this.slaveLogText!.append(`Float32值错误或地址不足: ${inputValue}\n`);
+                    }
+                    break;
+
+                case 7: // Float64
+                    const float64Value = parseFloat(inputValue) || 0;
+                    if (!isNaN(float64Value) && address < 65533) {
+                        const buffer = new ArrayBuffer(8);
+                        const doubleView = new Float64Array(buffer);
+                        const uint16View = new Uint16Array(buffer);
+                        doubleView[0] = float64Value;
+                        if (isLittleEndian) {
+                            holdingRegisters[address] = uint16View[0];
+                            holdingRegisters[address + 1] = uint16View[1];
+                            holdingRegisters[address + 2] = uint16View[2];
+                            holdingRegisters[address + 3] = uint16View[3];
+                        } else {
+                            holdingRegisters[address] = uint16View[3];
+                            holdingRegisters[address + 1] = uint16View[2];
+                            holdingRegisters[address + 2] = uint16View[1];
+                            holdingRegisters[address + 3] = uint16View[0];
+                        }
+                        this.slaveLogText!.append(`写入Float64: 地址=${address}, 值=${float64Value}\n`);
+                    } else {
+                        this.slaveLogText!.append(`Float64值错误或地址不足: ${inputValue}\n`);
+                    }
+                    break;
+            }
+
+            // 刷新表格显示
+            initializeTable();
+            writeValueInput.clear();
+        });
+
+        // 添加数据写入组件的折叠事件监听器
+        writeGroup.addEventListener('toggled', (checked) => {
+            writeGroup.setTitle(checked ? "数据写入 " : "数据写入");
+            // 手动控制子组件的可见性
+            writeAddrLabel.setVisible(checked);
+            writeAddrInput.setVisible(checked);
+            writeTypeLabel.setVisible(checked);
+            writeTypeCombo.setVisible(checked);
+            writeEndianLabel.setVisible(checked);
+            writeEndianCombo.setVisible(checked);
+            writeValueLabel.setVisible(checked);
+            writeValueInput.setVisible(checked);
+            writeBtn.setVisible(checked);
+        });
+
 
         // 寄存器显示区域
         const registerGroup = new QGroupBox();
@@ -855,6 +1313,8 @@ class ModbusTestApp {
         scrollWidget.setLayout(gridLayout);
         scrollArea.setWidget(scrollWidget);
         scrollArea.setWidgetResizable(true);
+        scrollArea.setMinimumHeight(400);
+        scrollArea.setMaximumHeight(700);
 
         registerLayout.addWidget(scrollArea);
 
@@ -944,8 +1404,8 @@ class ModbusTestApp {
                         valueLabel.setText("-");
                         valueLabel.setStyleSheet("padding: 5px; color: #888888; border-bottom: 1px solid #ccc;border-right: 1px solid #ccc; background-color: #f8f8f8;");
                     } else {
-                        // 根据显示类型计算值
-                        let displayValue = "0";
+                        // 根据显示类型计算值，显示默认值或实际值
+                        let displayValue = "--";
                         try {
                             switch (displayType) {
                                 case "Bool":
@@ -1048,9 +1508,7 @@ class ModbusTestApp {
             displayTypeCombo.setVisible(checked);
             endianLabel.setVisible(checked);
             endianCombo.setVisible(checked);
-            autoRefreshLabel.setVisible(checked);
             autoRefreshCheck.setVisible(checked);
-            refreshIntervalLabel.setVisible(checked);
             refreshIntervalSpin.setVisible(checked);
             refreshBtn.setVisible(checked);
         });
@@ -1072,7 +1530,7 @@ class ModbusTestApp {
         // 刷新按钮事件
         refreshBtn.addEventListener('clicked', () => {
             initializeTable();
-            logText.append("表格已手动刷新\n");
+            this.masterLogText!.append("表格已手动刷新\n");
         });
 
         // 自动刷新控制
@@ -1080,10 +1538,10 @@ class ModbusTestApp {
             refreshIntervalSpin.setEnabled(checked);
             if (checked) {
                 startAutoRefresh();
-                logText.append(`自动刷新已启用，间隔${refreshIntervalSpin.value()}ms\n`);
+                this.masterLogText!.append(`自动刷新已启用，间隔${refreshIntervalSpin.value()}ms\n`);
             } else {
                 stopAutoRefresh();
-                logText.append("自动刷新已停用\n");
+                this.masterLogText!.append("自动刷新已停用\n");
             }
         });
 
@@ -1091,7 +1549,7 @@ class ModbusTestApp {
         refreshIntervalSpin.addEventListener('valueChanged', () => {
             if (autoRefreshCheck.isChecked()) {
                 startAutoRefresh();
-                logText.append(`刷新间隔已更新为${refreshIntervalSpin.value()}ms\n`);
+                this.masterLogText!.append(`刷新间隔已更新为${refreshIntervalSpin.value()}ms\n`);
             }
         });
 
@@ -1102,240 +1560,44 @@ class ModbusTestApp {
         endianCombo.addEventListener('currentIndexChanged', () => initializeTable());
 
         // 日志显示
-        const logGroup = new QGroupBox();
-        logGroup.setTitle("运行日志 ");
-        logGroup.setCheckable(true);
-        logGroup.setChecked(true);
+        this.slaveLogGroup = new QGroupBox();
+        this.slaveLogGroup.setTitle("运行日志 ");
+        this.slaveLogGroup.setCheckable(true);
+        this.slaveLogGroup.setChecked(true);
         const logLayout = new QBoxLayout(Direction.TopToBottom);
-        logGroup.setLayout(logLayout);
+        this.slaveLogGroup.setLayout(logLayout);
 
-        const logText = new QTextEdit();
-        logText.setReadOnly(true);
-        logText.setMaximumHeight(150);
-        logLayout.addWidget(logText);
+        this.slaveLogText = new QTextEdit();
+        this.slaveLogText.setReadOnly(true);
+        this.slaveLogText.setMaximumHeight(120);
+        logLayout.addWidget(this.slaveLogText);
 
         // 添加日志组件的折叠事件监听器
-        logGroup.addEventListener('toggled', (checked) => {
-            logGroup.setTitle(checked ? "运行日志 " : "运行日志");
+        this.slaveLogGroup.addEventListener('toggled', (checked) => {
+            this.slaveLogGroup.setTitle(checked ? "运行日志 " : "运行日志");
             // 手动控制子组件的可见性
-            logText.setVisible(checked);
+            this.slaveLogText!.setVisible(checked);
         });
 
-        // 数据写入区域
-        const writeGroup = new QGroupBox();
-        writeGroup.setTitle("数据写入 ");
-        writeGroup.setCheckable(true);
-        writeGroup.setChecked(true);
-        const writeLayout = new QBoxLayout(Direction.LeftToRight);
-        writeLayout.setSpacing(10);
-        writeGroup.setLayout(writeLayout);
-        const writeAddrLabel = new QLabel();
-        writeAddrLabel.setFixedWidth(65);
-        writeAddrLabel.setText("写入地址:");
-        const writeAddrInput = new QLineEdit();
-        writeAddrInput.setPlaceholderText("地址");
-        writeAddrInput.setMaximumWidth(80);
-
-        const writeTypeLabel = new QLabel();
-        writeTypeLabel.setText("数据类型:");
-        writeTypeLabel.setFixedWidth(65);
-
-        const writeTypeCombo = new QComboBox();
-        writeTypeCombo.addItems(["UInt16", "UInt16", "Bool", "Int16", "Int32", "UInt32", "Float32", "Float64"]);
-        writeTypeCombo.setMaximumWidth(150);
-
-        const writeEndianLabel = new QLabel();
-        writeEndianLabel.setText("字节序:");
-        writeEndianLabel.setFixedWidth(60);
-        const writeEndianCombo = new QComboBox();
-        writeEndianCombo.addItems(["大端", "小端"]);
-        writeEndianCombo.setMaximumWidth(80);
-
-        const writeValueLabel = new QLabel();
-        writeValueLabel.setText("值:");
-        writeValueLabel.setFixedWidth(30);
-        const writeValueInput = new QLineEdit();
-        writeValueInput.setPlaceholderText("数值");
-        writeValueInput.setMaximumWidth(120);
-
-        const writeBtn = new QPushButton();
-        writeBtn.setText("写入");
-        writeBtn.setMaximumWidth(60);
-
-        writeLayout.addWidget(writeAddrLabel);
-        writeLayout.addWidget(writeAddrInput);
-        writeLayout.addWidget(writeTypeLabel);
-        writeLayout.addWidget(writeTypeCombo);
-        writeLayout.addWidget(writeEndianLabel);
-        writeLayout.addWidget(writeEndianCombo);
-        writeLayout.addWidget(writeValueLabel);
-        writeLayout.addWidget(writeValueInput);
-        writeLayout.addWidget(writeBtn);
-
-        // 统一写入按钮事件
-        writeBtn.addEventListener('clicked', () => {
-            const address = parseInt(writeAddrInput.text()) || 0;
-            const dataType = writeTypeCombo.currentIndex();
-            const inputValue = writeValueInput.text();
-            const isLittleEndian = writeEndianCombo.currentIndex() === 1;
-
-            if (address < 0 || address >= 65536) {
-                logText.append(`地址错误: ${address} (需要0-65535)\n`);
-                return;
-            }
-
-            switch (dataType) {
-                case 0: // 保持寄存器(UInt16)
-                    const holdingValue = parseInt(inputValue) || 0;
-                    if (holdingValue >= 0 && holdingValue <= 65535) {
-                        holdingRegisters[address] = holdingValue;
-                        logText.append(`写入保持寄存器: 地址=${address}, 值=${holdingValue}\n`);
-                    } else {
-                        logText.append(`保持寄存器值错误: ${inputValue} (需要0-65535)\n`);
-                    }
-                    break;
-
-                case 1: // 输入寄存器(UInt16)
-                    const inputRegValue = parseInt(inputValue) || 0;
-                    if (inputRegValue >= 0 && inputRegValue <= 65535) {
-                        inputRegisters[address] = inputRegValue;
-                        logText.append(`写入输入寄存器: 地址=${address}, 值=${inputRegValue}\n`);
-                    } else {
-                        logText.append(`输入寄存器值错误: ${inputValue} (需要0-65535)\n`);
-                    }
-                    break;
-
-                case 2: // 线圈(Bool)
-                    const coilValue = inputValue.toLowerCase() === 'true' || inputValue === '1';
-                    coils[address] = coilValue;
-                    logText.append(`写入线圈: 地址=${address}, 值=${coilValue}\n`);
-                    break;
-
-                case 3: // Int16
-                    const int16Value = parseInt(inputValue) || 0;
-                    if (int16Value >= -32768 && int16Value <= 32767) {
-                        holdingRegisters[address] = int16Value < 0 ? 65536 + int16Value : int16Value;
-                        logText.append(`写入Int16: 地址=${address}, 值=${int16Value}\n`);
-                    } else {
-                        logText.append(`Int16值错误: ${inputValue} (需要-32768到32767)\n`);
-                    }
-                    break;
-
-                case 4: // Int32
-                    const int32Value = parseInt(inputValue) || 0;
-                    if (int32Value >= -2147483648 && int32Value <= 2147483647 && address < 65535) {
-                        const uint32Value = int32Value < 0 ? 4294967296 + int32Value : int32Value;
-                        if (isLittleEndian) {
-                            holdingRegisters[address] = uint32Value & 0xFFFF;
-                            holdingRegisters[address + 1] = (uint32Value >> 16) & 0xFFFF;
-                        } else {
-                            holdingRegisters[address] = (uint32Value >> 16) & 0xFFFF;
-                            holdingRegisters[address + 1] = uint32Value & 0xFFFF;
-                        }
-                        logText.append(`写入Int32: 地址=${address}, 值=${int32Value}\n`);
-                    } else {
-                        logText.append(`Int32值错误或地址不足: ${inputValue}\n`);
-                    }
-                    break;
-
-                case 5: // UInt32
-                    const uint32Value = parseInt(inputValue) || 0;
-                    if (uint32Value >= 0 && uint32Value <= 4294967295 && address < 65535) {
-                        if (isLittleEndian) {
-                            holdingRegisters[address] = uint32Value & 0xFFFF;
-                            holdingRegisters[address + 1] = (uint32Value >> 16) & 0xFFFF;
-                        } else {
-                            holdingRegisters[address] = (uint32Value >> 16) & 0xFFFF;
-                            holdingRegisters[address + 1] = uint32Value & 0xFFFF;
-                        }
-                        logText.append(`写入UInt32: 地址=${address}, 值=${uint32Value}\n`);
-                    } else {
-                        logText.append(`UInt32值错误或地址不足: ${inputValue}\n`);
-                    }
-                    break;
-
-                case 6: // Float32
-                    const float32Value = parseFloat(inputValue) || 0;
-                    if (!isNaN(float32Value) && address < 65535) {
-                        const buffer = new ArrayBuffer(4);
-                        const floatView = new Float32Array(buffer);
-                        const uint16View = new Uint16Array(buffer);
-                        floatView[0] = float32Value;
-                        if (isLittleEndian) {
-                            holdingRegisters[address] = uint16View[0];
-                            holdingRegisters[address + 1] = uint16View[1];
-                        } else {
-                            holdingRegisters[address] = uint16View[1];
-                            holdingRegisters[address + 1] = uint16View[0];
-                        }
-                        logText.append(`写入Float32: 地址=${address}, 值=${float32Value}\n`);
-                    } else {
-                        logText.append(`Float32值错误或地址不足: ${inputValue}\n`);
-                    }
-                    break;
-
-                case 7: // Float64
-                    const float64Value = parseFloat(inputValue) || 0;
-                    if (!isNaN(float64Value) && address < 65533) {
-                        const buffer = new ArrayBuffer(8);
-                        const doubleView = new Float64Array(buffer);
-                        const uint16View = new Uint16Array(buffer);
-                        doubleView[0] = float64Value;
-                        if (isLittleEndian) {
-                            holdingRegisters[address] = uint16View[0];
-                            holdingRegisters[address + 1] = uint16View[1];
-                            holdingRegisters[address + 2] = uint16View[2];
-                            holdingRegisters[address + 3] = uint16View[3];
-                        } else {
-                            holdingRegisters[address] = uint16View[3];
-                            holdingRegisters[address + 1] = uint16View[2];
-                            holdingRegisters[address + 2] = uint16View[1];
-                            holdingRegisters[address + 3] = uint16View[0];
-                        }
-                        logText.append(`写入Float64: 地址=${address}, 值=${float64Value}\n`);
-                    } else {
-                        logText.append(`Float64值错误或地址不足: ${inputValue}\n`);
-                    }
-                    break;
-            }
-
-            // 刷新表格显示
-            initializeTable();
-            writeValueInput.clear();
-        });
-
-        // 添加数据写入组件的折叠事件监听器
-        writeGroup.addEventListener('toggled', (checked) => {
-            writeGroup.setTitle(checked ? "数据写入 " : "数据写入");
-            // 手动控制子组件的可见性
-            writeAddrLabel.setVisible(checked);
-            writeAddrInput.setVisible(checked);
-            writeTypeLabel.setVisible(checked);
-            writeTypeCombo.setVisible(checked);
-            writeEndianLabel.setVisible(checked);
-            writeEndianCombo.setVisible(checked);
-            writeValueLabel.setVisible(checked);
-            writeValueInput.setVisible(checked);
-            writeBtn.setVisible(checked);
-        });
 
         // 网格布局已通过scrollArea添加
 
         // 从站日志显示
-        const slaveLogGroup = new QGroupBox();
-        slaveLogGroup.setTitle("从站日志 ");
-        slaveLogGroup.setCheckable(true);
-        slaveLogGroup.setChecked(true);
-        const slaveLogLayout = new QBoxLayout(Direction.TopToBottom);
-        slaveLogGroup.setLayout(slaveLogLayout);
+        this.slaveLogGroup = new QGroupBox();
+        this.slaveLogGroup.setTitle("从站日志 ");
+        this.slaveLogGroup.setCheckable(true);
+        this.slaveLogGroup.setChecked(true);
 
-        slaveLogLayout.addWidget(logText);
+        const slaveLogLayout = new QBoxLayout(Direction.TopToBottom);
+        this.slaveLogGroup.setLayout(slaveLogLayout);
+
+        slaveLogLayout.addWidget(this.slaveLogText!);
 
         // 添加从站日志组件的折叠事件监听器
-        slaveLogGroup.addEventListener('toggled', (checked) => {
-            slaveLogGroup.setTitle(checked ? "从站日志 " : "从站日志");
+        this.slaveLogGroup.addEventListener('toggled', (checked) => {
+            this.slaveLogGroup!.setTitle(checked ? "从站日志 " : "从站日志");
             // 手动控制子组件的可见性
-            logText.setVisible(checked);
+            this.slaveLogText!.setVisible(checked);
         });
 
         // 事件处理
@@ -1347,44 +1609,44 @@ class ModbusTestApp {
             const vector = {
                 // 读取线圈状态 (FC01)
                 getCoil: (addr: number, unitID: number) => {
-                    logText.append(`读取线圈: 地址=${addr}, 单元ID=${unitID}\n`);
+                    this.slaveLogText!.append(`读取线圈: 地址=${addr}, 单元ID=${unitID}\n`);
                     return coils[addr] || false;
                 },
 
                 // 读取离散输入状态 (FC02)
                 getDiscreteInput: (addr: number, unitID: number) => {
-                    logText.append(`读取离散输入: 地址=${addr}, 单元ID=${unitID}\n`);
+                    this.slaveLogText!.append(`读取离散输入: 地址=${addr}, 单元ID=${unitID}\n`);
                     return coils[addr] || false; // 使用相同的数组
                 },
 
                 // 读取保持寄存器 (FC03)
                 getHoldingRegister: (addr: number, unitID: number) => {
-                    logText.append(`读取保持寄存器: 地址=${addr}, 单元ID=${unitID}\n`);
+                    this.slaveLogText!.append(`读取保持寄存器: 地址=${addr}, 单元ID=${unitID}\n`);
                     return holdingRegisters[addr] || 0;
                 },
 
                 // 读取输入寄存器 (FC04)
                 getInputRegister: (addr: number, unitID: number) => {
-                    logText.append(`读取输入寄存器: 地址=${addr}, 单元ID=${unitID}\n`);
+                    this.slaveLogText!.append(`读取输入寄存器: 地址=${addr}, 单元ID=${unitID}\n`);
                     return inputRegisters[addr] || 0;
                 },
 
                 // 写入单个线圈 (FC05)
                 setCoil: (addr: number, value: boolean, unitID: number) => {
-                    logText.append(`写入线圈: 地址=${addr}, 值=${value}, 单元ID=${unitID}\n`);
+                    this.slaveLogText!.append(`写入线圈: 地址=${addr}, 值=${value}, 单元ID=${unitID}\n`);
                     coils[addr] = value;
                     return true;
                 },
 
                 // 写入单个寄存器 (FC06)
                 setRegister: (addr: number, value: number, unitID: number) => {
-                    logText.append(`写入寄存器: 地址=${addr}, 值=${value}, 单元ID=${unitID}\n`);
+                    this.slaveLogText!.append(`写入寄存器: 地址=${addr}, 值=${value}, 单元ID=${unitID}\n`);
                     holdingRegisters[addr] = value;
                     return true;
                 }
             };
 
-            console.log(slaveId);
+            // console.log(slaveId);
 
             // 创建Modbus TCP服务器
             this.modbusServer = new ServerTCP(vector, {
@@ -1395,25 +1657,33 @@ class ModbusTestApp {
 
             // 监听错误事件
             this.modbusServer.on('error', (err) => {
-                logText.append(`服务器错误: ${err.message}\n`);
+                this.slaveLogText!.append(`服务器错误: ${err.message}\n`);
             });
 
             this.modbusServer.on('initialized', () => {
-                logText.append(`Modbus服务器已初始化\n`);
+                this.slaveLogText!.append(`Modbus服务器已初始化\n`);
             });
 
             // 启动服务器
-            logText.append(`从站启动，监听端口: ${port}, 单元ID: ${slaveId}\n`);
+            this.slaveLogText!.append(`从站启动，监听端口: ${port}, 单元ID: ${slaveId}\n`);
             startSlaveBtn.setEnabled(false);
             stopSlaveBtn.setEnabled(true);
+
+            // 更新从站状态指示器为绿色
+            this.isSlaveRunning = true;
+            this.updateTabTitles();
         });
 
         stopSlaveBtn.addEventListener('clicked', () => {
             if (this.modbusServer) {
                 this.modbusServer.close(() => {
-                    logText.append(`从站已停止\n`);
+                    this.slaveLogText!.append(`从站已停止\n`);
                     startSlaveBtn.setEnabled(true);
                     stopSlaveBtn.setEnabled(false);
+
+                    // 更新从站状态指示器为灰色
+                    this.isSlaveRunning = false;
+                    this.updateTabTitles();
                 });
                 this.modbusServer = null;
             }
@@ -1421,9 +1691,9 @@ class ModbusTestApp {
 
         layout.addWidget(slaveGroup);
         layout.addWidget(displayGroup);
-        layout.addWidget(registerGroup);
         layout.addWidget(writeGroup);
-        layout.addWidget(slaveLogGroup);
+        layout.addWidget(registerGroup);
+
 
         return widget;
     }
@@ -1525,7 +1795,7 @@ class ModbusTestApp {
     }
 
     // 启动连接状态检测
-    private startConnectionCheck(statusLabel: QLabel, connectBtn: QPushButton, disconnectBtn: QPushButton): void {
+    private startConnectionCheck(): void {
         // 清除之前的定时器
         this.stopConnectionCheck();
 
@@ -1540,10 +1810,11 @@ class ModbusTestApp {
             } catch (error) {
                 // 连接已断开
                 this.isConnected = false;
-                statusLabel.setText("状态: 连接已断开");
-                statusLabel.setStyleSheet("color: red; font-weight: bold;");
-                connectBtn.setEnabled(true);
-                disconnectBtn.setEnabled(false);
+
+                // 更新标签页状态点
+                this.updateTabTitles();
+
+                this.updateMenuState();
                 this.stopConnectionCheck();
 
                 // 关闭客户端连接
@@ -1557,6 +1828,167 @@ class ModbusTestApp {
         if (this.connectionCheckTimer) {
             clearInterval(this.connectionCheckTimer);
             this.connectionCheckTimer = null;
+        }
+    }
+
+    // 清空所有日志
+    private clearAllLogs(): void {
+        if (this.masterLogText) {
+            this.masterLogText.clear();
+        }
+        if (this.slaveLogText) {
+            this.slaveLogText.clear();
+        }
+    }
+
+    // 导出日志
+    private exportLogs(): void {
+        try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const logDir = path.join(__dirname, '../logs');
+
+            // 确保日志目录存在
+            if (!fs.existsSync(logDir)) {
+                fs.mkdirSync(logDir, { recursive: true });
+            }
+
+            let logContent = '';
+
+            // 添加主站日志
+            if (this.masterLogText) {
+                const masterLog = this.masterLogText.toPlainText();
+                if (masterLog.trim()) {
+                    logContent += '=== 主站日志 ===\n';
+                    logContent += masterLog;
+                    logContent += '\n\n';
+                }
+            }
+
+            // 添加从站日志
+            if (this.slaveLogText) {
+                const slaveLog = this.slaveLogText.toPlainText();
+                if (slaveLog.trim()) {
+                    logContent += '=== 从站日志 ===\n';
+                    logContent += slaveLog;
+                    logContent += '\n\n';
+                }
+            }
+
+            if (logContent.trim()) {
+                const logFile = path.join(logDir, `modbus-logs-${timestamp}.txt`);
+                fs.writeFileSync(logFile, logContent, 'utf8');
+
+                // 在主站日志中显示导出成功信息
+                if (this.masterLogText) {
+                    this.masterLogText.append(`日志已导出到: ${logFile}\n`);
+                }
+            } else {
+                // 在主站日志中显示无日志信息
+                if (this.masterLogText) {
+                    this.masterLogText.append('没有日志内容可导出\n');
+                }
+            }
+        } catch (error) {
+            // 在主站日志中显示导出错误
+            if (this.masterLogText) {
+                this.masterLogText.append(`导出日志失败: ${error}\n`);
+            }
+        }
+    }
+
+    // 显示日志对话框
+    private toggleLogVisibility(): void {
+        this.showLogDialog();
+    }
+
+    // 创建并显示日志对话框
+    private showLogDialog(): void {
+        const dialog = new QDialog();
+        dialog.setWindowTitle("日志查看器");
+        dialog.resize(800, 600);
+        dialog.setModal(false);
+
+        const layout = new QBoxLayout(Direction.TopToBottom);
+        dialog.setLayout(layout);
+
+        // 创建标签页
+        const tabWidget = new QTabWidget();
+
+        // 主站日志标签页（仅在已连接时显示）
+        if (this.isConnected && this.masterLogText) {
+            const masterLogWidget = new QWidget();
+            const masterLayout = new QBoxLayout(Direction.TopToBottom);
+            masterLogWidget.setLayout(masterLayout);
+
+            const masterLogDisplay = new QTextEdit();
+            masterLogDisplay.setReadOnly(true);
+            masterLogDisplay.setPlainText(this.masterLogText.toPlainText());
+            masterLogDisplay.setStyleSheet("font-family: 'Courier New', monospace; font-size: 12px; background-color: #f8f8f8;");
+
+            masterLayout.addWidget(masterLogDisplay);
+            tabWidget.addTab(masterLogWidget, new QIcon(), "主站日志");
+        }
+
+        // 从站日志标签页（仅在从站运行时显示）
+        if (this.isSlaveRunning && this.slaveLogText) {
+            const slaveLogWidget = new QWidget();
+            const slaveLayout = new QBoxLayout(Direction.TopToBottom);
+            slaveLogWidget.setLayout(slaveLayout);
+
+            const slaveLogDisplay = new QTextEdit();
+            slaveLogDisplay.setReadOnly(true);
+            slaveLogDisplay.setPlainText(this.slaveLogText.toPlainText());
+            slaveLogDisplay.setStyleSheet("font-family: 'Courier New', monospace; font-size: 12px; background-color: #f8f8f8;");
+
+            slaveLayout.addWidget(slaveLogDisplay);
+            tabWidget.addTab(slaveLogWidget, new QIcon(), "从站日志");
+        }
+
+        // 如果没有可显示的日志，显示提示信息
+        if (!this.isConnected && !this.isSlaveRunning) {
+            const noLogWidget = new QWidget();
+            const noLogLayout = new QBoxLayout(Direction.TopToBottom);
+            noLogWidget.setLayout(noLogLayout);
+
+            const noLogLabel = new QLabel();
+            noLogLabel.setText("当前没有可显示的日志\n\n请先连接主站或启动从站服务");
+            noLogLabel.setAlignment(0x84); // Qt::AlignCenter
+            noLogLabel.setStyleSheet("color: #666; font-size: 14px; padding: 50px;");
+
+            noLogLayout.addWidget(noLogLabel);
+            tabWidget.addTab(noLogWidget, new QIcon(), "无日志");
+        }
+
+        layout.addWidget(tabWidget);
+
+        // 添加按钮
+        const buttonLayout = new QBoxLayout(Direction.LeftToRight);
+
+        const closeBtn = new QPushButton();
+        closeBtn.setText("关闭");
+        closeBtn.addEventListener('clicked', () => {
+            dialog.close();
+        });
+
+        buttonLayout.addStretch();
+        buttonLayout.addWidget(closeBtn);
+
+        const buttonWidget = new QWidget();
+        buttonWidget.setLayout(buttonLayout);
+        layout.addWidget(buttonWidget);
+
+        dialog.exec();
+    }
+
+    private loadStyleSheet(): void {
+        try {
+            const cssPath = path.join(__dirname, '../assets/styles.txt');
+            const cssContent = fs.readFileSync(cssPath, 'utf8');
+            this.win.setStyleSheet(cssContent);
+        } catch (error) {
+            console.error('Failed to load stylesheet:', error);
+            // 如果加载失败，可以使用默认样式或者空样式
+            this.win.setStyleSheet('');
         }
     }
 
