@@ -609,6 +609,7 @@ class ModbusTestApp {
         // 为写入值输入框设置数据类型范围验证
         const updateWriteValueRange = () => {
             const dataType = writeDataTypeCombo.currentText();
+            console.log(dataType);
             switch (dataType) {
                 case "Bool":
                     writeValueEdit.setMinimum(0);
@@ -636,14 +637,14 @@ class ModbusTestApp {
                     writeValueEdit.setDecimals(0);
                     break;
                 case "Float32":
-                    writeValueEdit.setMinimum(-3.4028235e+38);
-                    writeValueEdit.setMaximum(3.4028235e+38);
-                    writeValueEdit.setDecimals(3);
+                    writeValueEdit.setMinimum(-1000000000);
+                    writeValueEdit.setMaximum(1000000000);
+                    writeValueEdit.setDecimals(6);
                     break;
                 case "Float64":
-                    writeValueEdit.setMinimum(-1.7976931348623157e+308);
-                    writeValueEdit.setMaximum(1.7976931348623157e+308);
-                    writeValueEdit.setDecimals(4);
+                    writeValueEdit.setMinimum(-1000000000);
+                    writeValueEdit.setMaximum(1000000000);
+                    writeValueEdit.setDecimals(6);
                     break;
                 default:
                     writeValueEdit.setMinimum(-2147483648);
@@ -1271,16 +1272,14 @@ class ModbusTestApp {
 
                     break;
                 case "Float32":
-                    writeValueInput.setMinimum(-3.4028235e+38);
-                    writeValueInput.setMaximum(3.4028235e+38);
-                    writeValueInput.setDecimals(3);
-
+                    writeValueInput.setMinimum(-1000000000);
+                    writeValueInput.setMaximum(1000000000);  // 添加分号
+                    writeValueInput.setDecimals(6);
                     break;
                 case "Float64":
-                    writeValueInput.setMinimum(-1.7976931348623157e+308);
-                    writeValueInput.setMaximum(1.7976931348623157e+308);
-                    writeValueInput.setDecimals(4);
-
+                    writeValueInput.setMinimum(-1000000000);
+                    writeValueInput.setMaximum(1000000000);  // 添加分号
+                    writeValueInput.setDecimals(6);
                     break;
                 default:
                     writeValueInput.setMinimum(-2147483648);
