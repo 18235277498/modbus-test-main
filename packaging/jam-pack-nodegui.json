@@ -58,7 +58,7 @@
     "skip": false,
     "description": "modbus测试工具",
     "detailColors": "3db54a 000000",
-    "appIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico",
+    "shortcutIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico",
     "appTitle": "modbusTestTool",
     "installerIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico",
     "uninstallerIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico"
