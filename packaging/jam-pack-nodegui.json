@@ -21,7 +21,8 @@
     ]
   },
   "addLauncher": {
-    "jsEntryPoint": "dist/main.cjs"
+    "jsEntryPoint": "dist/main.cjs",
+    "windowsIcon": "windows/applogo.ico"
   },
   "quietQode": {},
   "zip": {
