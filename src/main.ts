@@ -70,6 +70,9 @@ class ModbusTestApp {
     constructor() {
         this.client = new ModbusRTU();
         this.win = new QMainWindow();
+        const winLogo = new QIcon(path.join(__dirname, '../assets/logo.png'))
+        this.win.setWindowIcon(winLogo);
+
         // console.log(QStyleFactory.keys());
 
         // QApplication.setStyle(QStyleFactory.create('macOS'));
@@ -77,7 +80,7 @@ class ModbusTestApp {
     }
 
     private setupUI(): void {
-        this.win.setWindowTitle("Modbus测试工具");
+        this.win.setWindowTitle("ModbusTsetTool");
         this.win.resize(1200, 700);
 
         // 创建菜单栏
