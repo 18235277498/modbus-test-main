@@ -80,7 +80,7 @@ class ModbusTestApp {
     }
 
     private setupUI(): void {
-        this.win.setWindowTitle("ModbusTsetTool");
+        this.win.setWindowTitle("ModbusTestTool");
         this.win.resize(1200, 700);
 
         // 创建菜单栏

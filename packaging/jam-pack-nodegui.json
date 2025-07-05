@@ -25,7 +25,11 @@
   },
   "quietQode": {},
   "zip": {
-    "platforms": ["linux", "macos", "windows"],
+    "platforms": [
+      "linux",
+      "macos",
+      "windows"
+    ],
     "skip": false
   },
   "debian": {
@@ -40,7 +44,6 @@
     "prePack": [
       "cd $debianStep_debianSourceDirectory && mkdir -p usr/share/applications",
       "cd $debianStep_debianSourceDirectory && cp $pruneStep_trashDirectory/packaging/linux/nodeguiapp.desktop usr/share/applications/",
-
       "cd $debianStep_debianSourceDirectory && mkdir -p usr/share/icons",
       "cd $debianStep_debianSourceDirectory && cp -r $pruneStep_trashDirectory/packaging/linux/icons/hicolor usr/share/icons/"
     ]
@@ -55,15 +58,15 @@
     "skip": false,
     "description": "modbus测试工具",
     "detailColors": "3db54a 000000",
+    "appIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico",
     "appTitle": "modbusTestTool",
     "installerIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico",
     "uninstallerIcon": "$pruneStep_trashDirectory/packaging/windows/applogo.ico"
   },
-  "dmg" : {
+  "dmg": {
     "applicationIcon": "$pruneStep_trashDirectory/packaging/macos/modbuslogo.icns",
     "applicationTitle": "modbusTestTool",
     "nsHumanReadableCopyright": "Copyright 2023 Someone",
     "cfBundleIdentifier": "com.jijibooo.modbus-test"
   }
-
 }
